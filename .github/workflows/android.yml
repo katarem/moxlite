@@ -84,7 +84,7 @@ jobs:
             echo "::warning::Sin secretos ANDROID_KEYSTORE_*: el APK va firmado con una clave debug temporal y no se podrá instalar encima de la versión anterior."
             notes="${notes}
 
-          > ⚠️ Firmado con una clave debug temporal: para instalarlo hay que desinstalar antes la versión anterior. Configura los secretos \`ANDROID_KEYSTORE_*\` (ver README)."
+          > ⚠️ Firmado con una clave debug temporal: para instalarlo hay que desinstalar antes la versión anterior. Falta configurar la clave de firma del repositorio."
           fi
 
           gh release create "$tag" "moxlite.apk#Moxlite ${VERSION_NAME} (APK)" \

@@ -53,6 +53,14 @@ Cada merge en `main` publica automáticamente una versión nueva en
 
 La versión es `<moxlite.version>.<nº de commits>` (p. ej. `0.1.42`); la base está en `gradle.properties`.
 
+### Actualizaciones desde la app
+
+Al abrir la app (como mucho cada 6 h) se consulta la última Release de GitHub. Si hay una versión
+más nueva, aparece un aviso con las novedades y la opción de **Actualizar**: la app descarga el APK
+y abre el instalador de Android, que pide confirmación (y la primera vez, permiso para instalar
+desde Moxlite). También se puede buscar a mano en **Ajustes → Versión**. "Omitir" deja de avisar
+de esa versión concreta.
+
 ## Compilar
 
 - **Android Studio**: abrir la carpeta. Usa Gradle 8.11.1 (wrapper incluido).
@@ -62,27 +70,6 @@ La versión es `<moxlite.version>.<nº de commits>` (p. ej. `0.1.42`); la base e
   - En cada push a `main`: lo mismo y, si pasa, crea la Release `vX.Y.N` con `moxlite.apk`.
 
 Requisitos: JDK 17, Android SDK 35. minSdk 26.
-
-### Firma de las releases
-
-Para que cada versión se instale **encima** de la anterior (sin desinstalar ni perder los mazos guardados),
-todas tienen que ir firmadas con la misma clave. Se configura una vez:
-
-1. Generar la clave (guárdala bien: si se pierde, habrá que desinstalar para actualizar):
-   ```sh
-   keytool -genkeypair -v -keystore moxlite.jks -alias moxlite -keyalg RSA -keysize 4096 -validity 36500
-   base64 -w0 moxlite.jks > moxlite.jks.b64   # en macOS: base64 -i moxlite.jks -o moxlite.jks.b64
-   ```
-2. En GitHub → *Settings → Secrets and variables → Actions*, crear:
-
-   | Secreto | Valor |
-   |---|---|
-   | `ANDROID_KEYSTORE_BASE64` | contenido de `moxlite.jks.b64` |
-   | `ANDROID_KEYSTORE_PASSWORD` | contraseña del keystore |
-   | `ANDROID_KEY_ALIAS` | `moxlite` |
-   | `ANDROID_KEY_PASSWORD` | contraseña de la clave (la misma si no pusiste otra) |
-
-Sin estos secretos el workflow sigue publicando, pero firma con una clave debug temporal y lo avisa en la Release.
 
 ## Tests
 
@@ -97,6 +84,7 @@ Tests unitarios JVM en `app/src/test` (JUnit 4 + `kotlinx-coroutines-test`), sin
 | `data/sync/DeckOpTest` | Serialización de la cola de cambios y textos |
 | `data/session/ApiTrafficLogTest` | Registro de API: filtrado, redacción de secretos, duplicados, límite |
 | `data/local/EntitiesTest` | Tipo principal de carta y estado de carga |
+| `data/update/UpdateCheckerTest` | Comparación de versiones, elección del APK y notas de la Release |
 
 ## Estructura
 
