@@ -44,13 +44,59 @@ UI (Compose) → ViewModels → DeckRepository ──► Room (fuente de verdad,
 3. **Ajustes → Registro de API → Compartir**. El registro no incluye tokens ni contraseñas.
 4. Con eso se implementa `MoxfieldWriter` (ver `data/sync/DeckOp.kt`) y se cambia `PendingDiscoveryWriter` en `AppContainer`. La cola que ya tengas pendiente se subirá sola.
 
+## Descargar
+
+Cada merge en `main` publica automáticamente una versión nueva en
+[Releases](../../releases). El enlace a la última versión es siempre el mismo:
+
+**https://github.com/katarem/moxlite/releases/latest/download/moxlite.apk**
+
+La versión es `<moxlite.version>.<nº de commits>` (p. ej. `0.1.42`); la base está en `gradle.properties`.
+
 ## Compilar
 
-- **Android Studio**: abrir la carpeta. Usa Gradle 8.11.1 (definido en `gradle/wrapper/gradle-wrapper.properties`).
-- **Terminal**: con Gradle instalado, `gradle wrapper` una vez y luego `./gradlew assembleDebug`.
-- **GitHub Actions**: `.github/workflows/android.yml` pasa los tests y sube el APK debug y release como artefacto.
+- **Android Studio**: abrir la carpeta. Usa Gradle 8.11.1 (wrapper incluido).
+- **Terminal**: `./gradlew assembleDebug`. Tests: `./gradlew testDebugUnitTest`.
+- **GitHub Actions** (`.github/workflows/android.yml`):
+  - En cada PR: tests unitarios + APK debug y release como artefacto.
+  - En cada push a `main`: lo mismo y, si pasa, crea la Release `vX.Y.N` con `moxlite.apk`.
 
 Requisitos: JDK 17, Android SDK 35. minSdk 26.
+
+### Firma de las releases
+
+Para que cada versión se instale **encima** de la anterior (sin desinstalar ni perder los mazos guardados),
+todas tienen que ir firmadas con la misma clave. Se configura una vez:
+
+1. Generar la clave (guárdala bien: si se pierde, habrá que desinstalar para actualizar):
+   ```sh
+   keytool -genkeypair -v -keystore moxlite.jks -alias moxlite -keyalg RSA -keysize 4096 -validity 36500
+   base64 -w0 moxlite.jks > moxlite.jks.b64   # en macOS: base64 -i moxlite.jks -o moxlite.jks.b64
+   ```
+2. En GitHub → *Settings → Secrets and variables → Actions*, crear:
+
+   | Secreto | Valor |
+   |---|---|
+   | `ANDROID_KEYSTORE_BASE64` | contenido de `moxlite.jks.b64` |
+   | `ANDROID_KEYSTORE_PASSWORD` | contraseña del keystore |
+   | `ANDROID_KEY_ALIAS` | `moxlite` |
+   | `ANDROID_KEY_PASSWORD` | contraseña de la clave (la misma si no pusiste otra) |
+
+Sin estos secretos el workflow sigue publicando, pero firma con una clave debug temporal y lo avisa en la Release.
+
+## Tests
+
+Tests unitarios JVM en `app/src/test` (JUnit 4 + `kotlinx-coroutines-test`), sin emulador:
+
+| Fichero | Qué cubre |
+|---|---|
+| `DeckTextTest`, `domain/DeckTextFormatTest` | Importar/exportar listas de texto (cabeceras, ediciones, foil, MTGO, ida y vuelta) |
+| `MoxfieldDtoTest`, `data/remote/*` | Parseo tolerante de la API de Moxfield y Scryfall, parámetros de búsqueda, URLs de imagen, detección de Cloudflare, mensajes de error |
+| `data/repo/DeckMapperTest` | DTO → Room: cartas, carta destacada, colores, estado local conservado |
+| `data/repo/CardRepositoryTest` | Resolución de listas contra Scryfall (lotes de 75, impresión vs. nombre, cartas partidas) con un servicio falso |
+| `data/sync/DeckOpTest` | Serialización de la cola de cambios y textos |
+| `data/session/ApiTrafficLogTest` | Registro de API: filtrado, redacción de secretos, duplicados, límite |
+| `data/local/EntitiesTest` | Tipo principal de carta y estado de carga |
 
 ## Estructura
 

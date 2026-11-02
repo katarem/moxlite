@@ -1,16 +1,49 @@
 name: Android
 
+# - Pull requests: tests unitarios + compilación debug y release.
+# - Push a main (al hacer merge): lo mismo y, si todo pasa, publica una Release de GitHub
+#   con el APK listo para descargar.
+
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
 
 jobs:
   build:
+    name: Tests y APK
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # para crear la Release en main
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # el versionCode sale del número de commits
+
+      - name: Calcular versión
+        id: version
+        run: |
+          base=$(grep -E '^moxlite\.version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')
+          code=$(git rev-list --count HEAD)
+          name="${base}.${code}"
+          echo "VERSION_CODE=${code}" >> "$GITHUB_ENV"
+          echo "VERSION_NAME=${name}" >> "$GITHUB_ENV"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "Versión ${name} (código ${code})"
 
       - uses: actions/setup-java@v4
         with:
@@ -18,16 +51,45 @@ jobs:
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.11.1
 
       - name: Tests unitarios
-        run: gradle testDebugUnitTest
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Informe de tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
 
       - name: Compilar APK
-        run: gradle assembleDebug assembleRelease
+        run: ./gradlew assembleDebug assembleRelease --stacktrace
 
       - uses: actions/upload-artifact@v4
         with:
-          name: moxlite-apk
+          name: moxlite-apk-${{ steps.version.outputs.name }}
           path: app/build/outputs/apk/**/*.apk
+
+      - name: Publicar Release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${VERSION_NAME}"
+          cp app/build/outputs/apk/release/app-release.apk moxlite.apk
+
+          notes="Instalar: descarga \`moxlite.apk\` en el móvil y ábrelo."
+          if [ -z "${ANDROID_KEYSTORE_BASE64}" ]; then
+            echo "::warning::Sin secretos ANDROID_KEYSTORE_*: el APK va firmado con una clave debug temporal y no se podrá instalar encima de la versión anterior."
+            notes="${notes}
+
+          > ⚠️ Firmado con una clave debug temporal: para instalarlo hay que desinstalar antes la versión anterior. Configura los secretos \`ANDROID_KEYSTORE_*\` (ver README)."
+          fi
+
+          gh release create "$tag" "moxlite.apk#Moxlite ${VERSION_NAME} (APK)" \
+            --target "$GITHUB_SHA" \
+            --title "Moxlite ${VERSION_NAME}" \
+            --notes "$notes" \
+            --generate-notes \
+            --latest
