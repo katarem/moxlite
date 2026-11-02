@@ -41,6 +41,7 @@ import es.moxlite.ui.importer.ImportScreen
 import es.moxlite.ui.search.SearchScreen
 import es.moxlite.ui.settings.ApiLogScreen
 import es.moxlite.ui.settings.SettingsScreen
+import es.moxlite.ui.update.UpdatePrompt
 import es.moxlite.ui.users.UserDecksScreen
 import es.moxlite.ui.users.UsersScreen
 import es.moxlite.ui.web.WebMode
@@ -75,7 +76,8 @@ private val tabs = listOf(
 @Composable
 fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
     val nav = rememberNavController()
-    val online by appContainer().connectivity.online.collectAsStateWithLifecycle()
+    val container = appContainer()
+    val online by container.connectivity.online.collectAsStateWithLifecycle()
     var importDraft by remember { mutableStateOf("") }
 
     LaunchedEffect(incoming) {
@@ -177,6 +179,8 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
             OfflineBanner(!online)
         }
     }
+
+    UpdatePrompt(container.updater)
 }
 
 private fun NavHostController.switchTab(route: String) = navigate(route) {

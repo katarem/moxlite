@@ -35,6 +35,10 @@ android {
         targetSdk = 35
         versionCode = appVersionCode
         versionName = appVersionName
+
+        // Repositorio de GitHub donde se buscan actualizaciones (en CI, el propio repositorio).
+        val updateRepository = providers.environmentVariable("GITHUB_REPOSITORY").getOrElse("katarem/moxlite")
+        buildConfigField("String", "UPDATE_REPOSITORY", "\"$updateRepository\"")
     }
 
     signingConfigs {

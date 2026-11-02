@@ -38,7 +38,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import es.moxlite.BuildConfig
 import es.moxlite.data.remote.Http
+import es.moxlite.data.update.UpdateState
 import es.moxlite.data.sync.DeckOp
 import es.moxlite.data.sync.SyncWorker
 import es.moxlite.data.sync.describe
@@ -61,6 +63,7 @@ fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openDeck:
     val pending by container.deckRepository.observePendingOps().collectAsStateWithLifecycle(emptyList())
     var userName by remember(session.userName) { mutableStateOf(session.userName) }
     var cacheBytes by remember { mutableLongStateOf(container.imageLoader.diskCache?.size ?: 0L) }
+    val update by container.updater.state.collectAsStateWithLifecycle()
 
     Scaffold(topBar = { TopAppBar(title = { Text("Ajustes") }) }) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
@@ -160,6 +163,28 @@ fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openDeck:
             }
 
             item { SectionHeader("Acerca de") }
+            item {
+                val status = when (val u = update) {
+                    UpdateState.Checking -> "Buscando actualizaciones…"
+                    UpdateState.UpToDate -> "Tienes la última versión"
+                    is UpdateState.Available -> "Versión ${u.info.version} disponible: toca para actualizar"
+                    is UpdateState.Downloading -> "Descargando ${u.info.version}…"
+                    is UpdateState.ReadyToInstall -> "Versión ${u.info.version} descargada: toca para instalar"
+                    is UpdateState.Failed -> u.message
+                    UpdateState.Idle -> "Toca para buscar actualizaciones"
+                }
+                ListItem(
+                    headlineContent = { Text("Versión ${BuildConfig.VERSION_NAME}") },
+                    supportingContent = { Text(status) },
+                    modifier = Modifier.clickable(enabled = update !is UpdateState.Checking) {
+                        when (update) {
+                            is UpdateState.Available, is UpdateState.Downloading, is UpdateState.ReadyToInstall ->
+                                container.updater.showDialog()
+                            else -> container.updater.checkNow()
+                        }
+                    },
+                )
+            }
             item {
                 Text(
                     "Cliente no oficial. Usa la API interna de Moxfield (puede cambiar sin aviso) y las imágenes y datos de cartas de Scryfall. " +

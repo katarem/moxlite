@@ -20,6 +20,7 @@ import es.moxlite.data.session.MoxfieldWebBridge
 import es.moxlite.data.session.SessionManager
 import es.moxlite.data.session.WebViewCookieJar
 import es.moxlite.data.sync.PendingDiscoveryWriter
+import es.moxlite.data.update.AppUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -126,6 +127,14 @@ class AppContainer(private val context: Context) {
         .build()
 
     val cardRepository = CardRepository(scryfallService)
+
+    /** Actualizaciones desde las Releases de GitHub. */
+    val updater = AppUpdater(
+        context = context,
+        client = baseClient.newBuilder().readTimeout(60, TimeUnit.SECONDS).build(),
+        repository = BuildConfig.UPDATE_REPOSITORY,
+        currentVersion = BuildConfig.VERSION_NAME,
+    )
 
     val deckRepository = DeckRepository(
         context = context,
