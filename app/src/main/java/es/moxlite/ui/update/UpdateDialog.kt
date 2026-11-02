@@ -1,5 +1,9 @@
 package es.moxlite.ui.update
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -29,6 +34,15 @@ import es.moxlite.data.update.UpdateState
  */
 @Composable
 fun UpdatePrompt(updater: AppUpdater) {
+    // Android 13+: pedir una vez el permiso para la notificación de versión nueva.
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(updater) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && updater.shouldAskNotificationPermission()) {
+            updater.markNotificationPermissionAsked()
+            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     LifecycleStartEffect(updater) {
         updater.checkIfDue()
         onStopOrDispose { }

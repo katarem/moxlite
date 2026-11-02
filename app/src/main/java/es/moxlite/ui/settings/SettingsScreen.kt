@@ -1,6 +1,11 @@
 package es.moxlite.ui.settings
 
+import android.Manifest
 import android.content.Intent
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -37,9 +43,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import es.moxlite.BuildConfig
 import es.moxlite.data.remote.Http
+import es.moxlite.data.update.UpdateNotifications
 import es.moxlite.data.update.UpdateState
 import es.moxlite.data.sync.DeckOp
 import es.moxlite.data.sync.SyncWorker
@@ -64,6 +72,30 @@ fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openDeck:
     var userName by remember(session.userName) { mutableStateOf(session.userName) }
     var cacheBytes by remember { mutableLongStateOf(container.imageLoader.diskCache?.size ?: 0L) }
     val update by container.updater.state.collectAsStateWithLifecycle()
+    val notifyUpdates by container.updater.backgroundEnabled.collectAsStateWithLifecycle()
+    var canNotify by remember { mutableStateOf(UpdateNotifications.canNotify(context)) }
+    LifecycleResumeEffect(Unit) {
+        canNotify = UpdateNotifications.canNotify(context)
+        onPauseOrDispose { }
+    }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        canNotify = granted && UpdateNotifications.canNotify(context)
+        // Si Android ya no muestra el diálogo (denegado antes), llevar a los ajustes de la app.
+        if (!granted) {
+            context.startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            )
+        }
+    }
+    val askNotifications = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            context.startActivity(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            )
+        }
+    }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Ajustes") }) }) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
@@ -182,6 +214,33 @@ fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openDeck:
                                 container.updater.showDialog()
                             else -> container.updater.checkNow()
                         }
+                    },
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text("Avisar de versiones nuevas") },
+                    supportingContent = {
+                        Text(
+                            when {
+                                !notifyUpdates -> "Solo se comprueba al abrir la app"
+                                !canNotify -> "Las notificaciones de Moxlite están bloqueadas: toca para permitirlas"
+                                else -> "Notificación aunque la app esté cerrada (cada 12 h)"
+                            }
+                        )
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = notifyUpdates,
+                            onCheckedChange = { enabled ->
+                                container.updater.setBackgroundEnabled(enabled)
+                                if (enabled && !canNotify) askNotifications()
+                            },
+                        )
+                    },
+                    modifier = Modifier.clickable {
+                        if (notifyUpdates && !canNotify) askNotifications()
+                        else container.updater.setBackgroundEnabled(!notifyUpdates)
                     },
                 )
             }

@@ -77,6 +77,13 @@ object UpdateChecker {
         )
     }
 
+    /**
+     * Si la comprobación en segundo plano debe notificar [version]: no se avisa de una versión
+     * omitida ni dos veces de la misma.
+     */
+    fun shouldNotify(version: String, skipped: String?, lastNotified: String?): Boolean =
+        version != skipped && version != lastNotified
+
     /** Notas de la Release en texto plano: sin comentarios HTML, encabezados ni enlaces de comparación. */
     fun cleanNotes(markdown: String): String =
         markdown

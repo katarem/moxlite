@@ -61,6 +61,10 @@ y abre el instalador de Android, que pide confirmación (y la primera vez, permi
 desde Moxlite). También se puede buscar a mano en **Ajustes → Versión**. "Omitir" deja de avisar
 de esa versión concreta.
 
+Además, cada 12 h (con conexión) se comprueba en segundo plano y, si hay versión nueva, llega una
+**notificación**; al tocarla se abre la app con el aviso. En Android 13+ la app pide permiso de
+notificaciones la primera vez. Se puede desactivar en **Ajustes → Avisar de versiones nuevas**.
+
 ## Compilar
 
 - **Android Studio**: abrir la carpeta. Usa Gradle 8.11.1 (wrapper incluido).

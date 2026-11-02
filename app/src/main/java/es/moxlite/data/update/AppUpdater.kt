@@ -107,6 +107,53 @@ class AppUpdater(
         )
     }
 
+    // ---------- Segundo plano (ver UpdateWorker) ----------
+
+    private val _backgroundEnabled = MutableStateFlow(prefs.getBoolean(KEY_BACKGROUND, true))
+
+    /** Avisar con una notificación aunque la app esté cerrada. Se cambia en Ajustes. */
+    val backgroundEnabled: StateFlow<Boolean> = _backgroundEnabled.asStateFlow()
+
+    fun setBackgroundEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_BACKGROUND, enabled).apply()
+        _backgroundEnabled.value = enabled
+        scheduleBackgroundCheck()
+    }
+
+    /** Programa (o cancela) la comprobación periódica según el ajuste. */
+    fun scheduleBackgroundCheck() {
+        UpdateWorker.schedule(context, enabled = _backgroundEnabled.value && !isDevBuild)
+    }
+
+    /**
+     * Para el worker: la versión nueva de la que hay que avisar, o null si no hay o ya se avisó.
+     * Lanza la excepción de red si falla, para que WorkManager reintente.
+     */
+    suspend fun findUpdateToNotify(): UpdateInfo? {
+        val info = fetchLatest()?.let { UpdateChecker.evaluate(it, currentVersion) } ?: return null
+        // Si la app está abierta, que Ajustes lo refleje sin esperar a la siguiente comprobación.
+        _state.compareAndSet(UpdateState.Idle, UpdateState.Available(info))
+        _state.compareAndSet(UpdateState.UpToDate, UpdateState.Available(info))
+        val notify = UpdateChecker.shouldNotify(
+            version = info.version,
+            skipped = prefs.getString(KEY_SKIPPED, null),
+            lastNotified = prefs.getString(KEY_LAST_NOTIFIED, null),
+        )
+        return info.takeIf { notify }
+    }
+
+    fun markNotified(info: UpdateInfo) {
+        prefs.edit().putString(KEY_LAST_NOTIFIED, info.version).apply()
+    }
+
+    /** El permiso de notificaciones (Android 13+) se pide solo una vez de forma automática. */
+    fun shouldAskNotificationPermission(): Boolean =
+        !isDevBuild && _backgroundEnabled.value && !prefs.getBoolean(KEY_ASKED_PERMISSION, false)
+
+    fun markNotificationPermissionAsked() {
+        prefs.edit().putBoolean(KEY_ASKED_PERMISSION, true).apply()
+    }
+
     fun showDialog() {
         if (_state.value.info != null) _dialogVisible.value = true
     }
@@ -220,6 +267,9 @@ class AppUpdater(
     companion object {
         private const val KEY_LAST_CHECK = "last_check"
         private const val KEY_SKIPPED = "skipped_version"
+        private const val KEY_LAST_NOTIFIED = "last_notified_version"
+        private const val KEY_BACKGROUND = "background_check"
+        private const val KEY_ASKED_PERMISSION = "asked_notification_permission"
         private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
         private const val APK_MIME = "application/vnd.android.package-archive"
     }

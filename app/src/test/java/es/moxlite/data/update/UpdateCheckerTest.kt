@@ -2,6 +2,7 @@ package es.moxlite.data.update
 
 import es.moxlite.data.remote.Http
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -70,6 +71,14 @@ class UpdateCheckerTest {
     @Test
     fun `una compilacion local dev ve cualquier release como nueva`() {
         assertNotNull(UpdateChecker.evaluate(release("v0.1.1"), "0.1-dev"))
+    }
+
+    @Test
+    fun `la notificacion no repite ni avisa de versiones omitidas`() {
+        assertTrue(UpdateChecker.shouldNotify("0.1.5", skipped = null, lastNotified = null))
+        assertTrue(UpdateChecker.shouldNotify("0.1.6", skipped = "0.1.5", lastNotified = "0.1.5"))
+        assertFalse(UpdateChecker.shouldNotify("0.1.5", skipped = "0.1.5", lastNotified = null))
+        assertFalse(UpdateChecker.shouldNotify("0.1.5", skipped = null, lastNotified = "0.1.5"))
     }
 
     @Test

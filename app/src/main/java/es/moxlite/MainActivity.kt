@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
 import es.moxlite.data.remote.moxfield.MoxfieldIds
+import es.moxlite.data.update.UpdateNotifications
 import es.moxlite.ui.AppNav
 import es.moxlite.ui.theme.MoxliteTheme
 
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         incoming.value = parse(intent)
+        handleUpdateNotification(intent)
         setContent {
             MoxliteTheme {
                 AppNav(
@@ -37,6 +39,14 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         incoming.value = parse(intent)
+        handleUpdateNotification(intent)
+    }
+
+    /** Al tocar la notificación de versión nueva: comprobar y mostrar el diálogo. */
+    private fun handleUpdateNotification(intent: Intent?) {
+        if (intent == null || !intent.getBooleanExtra(UpdateNotifications.EXTRA_SHOW_UPDATE, false)) return
+        intent.removeExtra(UpdateNotifications.EXTRA_SHOW_UPDATE) // no repetir al rotar la pantalla
+        (application as MoxliteApp).container.updater.checkNow()
     }
 
     private fun parse(intent: Intent?): IncomingLink? {
