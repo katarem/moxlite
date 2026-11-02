@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gema hexagonal sencilla (original, sin marcas de terceros) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FF4FC3B0"
+        android:pathData="M54,30 L74,42 L74,66 L54,78 L34,66 L34,42 Z" />
+    <path
+        android:fillColor="#FF2E8C7E"
+        android:pathData="M54,30 L74,42 L54,54 L34,42 Z" />
+    <path
+        android:fillColor="#FFB8F1E6"
+        android:pathData="M54,54 L74,42 L74,66 L54,78 Z" />
+</vector>
