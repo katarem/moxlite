@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +43,7 @@ import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.QrCode
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Restore
@@ -83,7 +87,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -142,6 +148,7 @@ fun DeckScreen(
     val session by container.session.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
+    val clipboard = LocalClipboardManager.current
 
     var editingRequested by rememberSaveable { mutableStateOf(false) }
     val editing = editingRequested && canEdit
@@ -155,6 +162,10 @@ fun DeckScreen(
                 is DeckEvent.Message -> snackbar.showSnackbar(e.text)
                 is DeckEvent.OpenDeck -> openDeck(e.publicId)
                 is DeckEvent.Closed -> onBack()
+                is DeckEvent.CopyCode -> {
+                    clipboard.setText(AnnotatedString(e.code))
+                    snackbar.showSnackbar(t.codeCopied)
+                }
                 is DeckEvent.Share -> context.startActivity(
                     Intent.createChooser(
                         Intent(Intent.ACTION_SEND).setType("text/plain")
@@ -188,6 +199,7 @@ fun DeckScreen(
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         if (d != null) {
                             MenuItem(t.shareLink, Icons.Outlined.Link) { menu = false; vm.shareLink() }
+                            MenuItem(t.copyCode, Icons.Outlined.QrCode) { menu = false; vm.copyCode() }
                             MenuItem(t.exportText, Icons.Outlined.Share) { menu = false; dialog = "export" }
                             MenuItem(t.copyDeck, Icons.Outlined.ContentCopy) { menu = false; dialog = "copy" }
                             if (canEdit) MenuItem(t.rename, Icons.Outlined.Edit) { menu = false; dialog = "rename" }
@@ -262,6 +274,9 @@ fun DeckScreen(
                         },
                     )
                 }
+                // Mientras Room responde o el mazo cambia de id (recién subido a Moxfield):
+                // nunca una pantalla en blanco.
+                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
         }
     }
@@ -516,7 +531,13 @@ private fun DeckHeader(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ColorPips(deck.colorIdentity, size = 14)
                     Spacer(Modifier.width(8.dp))
-                    Text(deck.format, style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        listOfNotNull(
+                            LocalStrings.current.formatLabel(deck.format).ifBlank { null },
+                            deck.bracket?.let { "Bracket $it" },
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                 }
                 if (deck.authorUserName.isNotBlank()) {
                     Text(
@@ -818,8 +839,14 @@ private fun PrintingsDialog(
     onPick: (ScryCard) -> Unit,
 ) {
     val t = LocalStrings.current
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize().padding(12.dp), shape = RoundedCornerShape(16.dp)) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        Surface(
+            Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp),
+            shape = RoundedCornerShape(16.dp),
+        ) {
             Column {
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {

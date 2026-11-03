@@ -67,7 +67,7 @@ fun ImportScreen(draft: ImportDraft, onBack: () -> Unit, onImported: (String) ->
         ) {
             OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(t.deckName) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FORMATS.forEach { f -> FilterChip(selected = format == f, onClick = { format = f }, label = { Text(f) }) }
+                FORMATS.forEach { f -> FilterChip(selected = format == f, onClick = { format = f }, label = { Text(t.formatLabel(f)) }) }
             }
             OutlinedTextField(
                 value = text,

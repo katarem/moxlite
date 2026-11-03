@@ -3,6 +3,8 @@ package es.moxlite.i18n
 import es.moxlite.data.settings.DeckGrouping
 import es.moxlite.data.settings.DeckSorting
 import es.moxlite.data.settings.DeckViewMode
+import es.moxlite.domain.ColorMatch
+import es.moxlite.domain.DeckSort
 
 /** Todos los textos de la app. Implementaciones: [Es] (por defecto) y [En]. */
 interface Strings {
@@ -94,9 +96,6 @@ interface Strings {
 
     // Mis mazos
     val myDecks: String
-    val yoursAndSaved: String
-    val savedOnPhone: String
-    val recentlyViewed: String
     val noDecksYet: String
     val noDecksYetLoggedIn: String
     fun decksFound(n: Int): String
@@ -132,6 +131,8 @@ interface Strings {
     val noLongerOffline: String
     val shareLink: String
     fun shareMessage(deckName: String, link: String): String
+    val copyCode: String
+    val codeCopied: String
     fun shareTitle(deckName: String): String
     val exportText: String
     val exportQuestion: String
@@ -176,7 +177,36 @@ interface Strings {
     val searchDecks: String
     val searchDecksPlaceholder: String
     val searchDecksIntro: String
-    fun deckSortLabel(sortType: String): String
+    fun deckSortLabel(sort: DeckSort): String
+    val searchDecksColorsHint: String
+
+    // Filtros de mazos (búsqueda y "Mis mazos")
+    val filterSort: String
+    val filterFormat: String
+    fun formatLabel(format: String): String
+    val filterColors: String
+    val colorless: String
+    fun colorMatchLabel(match: ColorMatch): String
+    val filterCommander: String
+    val commanderPlaceholder: String
+    fun commanderNotFound(name: String): String
+    val filterBracket: String
+    fun bracketLabel(bracket: Int): String
+    val filterHub: String
+    val hubPlaceholder: String
+    val anyOption: String
+    val clearFilters: String
+    val applyFilters: String
+    val noDecksMatch: String
+
+    // "Mis mazos" por pestañas
+    val tabMine: String
+    val tabSaved: String
+    val tabRecent: String
+    val searchMyDecksPlaceholder: String
+    val noSavedDecks: String
+    val noRecentDecks: String
+    val noOwnDecksNoAccount: String
     val users: String
     val searchUserPlaceholder: String
     val searchUserHint: String

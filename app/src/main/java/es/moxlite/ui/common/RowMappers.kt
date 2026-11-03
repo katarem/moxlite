@@ -23,6 +23,7 @@ fun DeckEntity.toRow() = DeckRowData(
     localOnly = isLocalOnly,
     localChanges = hasLocalChanges,
     isPrivate = visibility == "private",
+    bracket = bracket,
 )
 
 /** Recorte del arte de la carta destacada: Scryfall si se conoce su id; si no, el de Moxfield. */
@@ -40,6 +41,7 @@ fun MoxDeckSummaryDto.toRow() = DeckRowData(
     likes = likeCount,
     cards = mainboardCount,
     isPrivate = visibility == "private",
+    bracket = effectiveBracket,
 )
 
 @Composable

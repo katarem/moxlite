@@ -40,9 +40,30 @@ data class DeckEntity(
     /** Última vez que se descargó de Moxfield (0 = nunca, solo resumen de búsqueda). */
     val fetchedAt: Long = 0,
     val imagesCachedAt: Long? = null,
+    /** Bracket de Commander (1–5) según Moxfield. */
+    val bracket: Int? = null,
+    /** Tipos de mazo ("hubs" de Moxfield), separados por saltos de línea. */
+    val hubs: String = "",
+    /** Comandantes (nombres en inglés), separados por saltos de línea. */
+    val commanders: String = "",
+    /** Última vez que se abrió en la app (0 = nunca). */
+    val viewedAt: Long = 0,
 ) {
     val isFullyLoaded: Boolean get() = fetchedAt > 0 || isLocalOnly
+    val commanderList: List<String> get() = commanders.split('\n').filter { it.isNotBlank() }
+    val hubList: List<String> get() = hubs.split('\n').filter { it.isNotBlank() }
+
+    companion object {
+        fun joinNames(names: List<String>) = names.map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString("\n")
+    }
 }
+
+/** Un mazo creado en el móvil pasa a tener el publicId de Moxfield al subirse: aquí se apunta el cambio. */
+@Entity(tableName = "deck_aliases")
+data class DeckAliasEntity(
+    @PrimaryKey val oldId: String,
+    val newId: String,
+)
 
 @Entity(
     tableName = "deck_cards",

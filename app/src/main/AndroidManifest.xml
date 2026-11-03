@@ -37,6 +37,14 @@
                 <data android:pathPrefix="/decks/" />
             </intent-filter>
 
+            <!-- moxlite://deck/<código>: mazos compartidos desde Moxlite, se abren directamente -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="moxlite" />
+            </intent-filter>
+
             <!-- Compartir un enlace o una lista en texto hacia la app -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

@@ -22,6 +22,16 @@ Base: `https://api2.moxfield.com`
 
 **"Ver usuarios" = `authorUserNames=<usuario>`**: así se listan los mazos públicos de cualquier usuario.
 
+Notas para los filtros de la app (de [moxtui/FINDINGS.md](https://github.com/apaz-cli/moxtui/blob/main/FINDINGS.md), sacado del código de la web):
+
+- La web manda el texto libre como `filter` (busca en nombre y descripción); la app manda `q` y `filter`.
+- `commanderCardId` quiere el **id de impresión** (`card.id`, el de `/v2/cards/lookup?name=`), no el `uniqueCardId`; un id que no existe se ignora sin error.
+- `minBracket`/`maxBracket` filtran por bracket (1–5). `sortType=deckBracket`/`bracket` responde **400**.
+- **No hay filtro de colores**: `colors`/`colorIdentity` se ignoran. La app filtra los colores sobre cada página.
+- `hubName` filtra por tipo de mazo (hub). Cada resultado trae `hubNames`, `bracket`, `autoBracket`, `userBracket` y `commanders`.
+- Con `sortType=updated` el orden cambia mientras se pagina: un mismo mazo puede salir en dos páginas (la app quita repetidos).
+- `pageSize` máximo 100 y como mucho 10 000 resultados (100 páginas).
+
 ### Forma del mazo (`/v3/decks/all/{id}`)
 
 Campos clave: `id`, `publicId`, `name`, `format`, `description`, `visibility` (`public|unlisted|private|deleted`), `authors[]`, `createdByUser`, `createdAtUtc`, `lastUpdatedAtUtc`, `version`, `likeCount`, `viewCount`, `colorIdentity`, `bracket`, `tokens[]`, `originalDeck` (si es copia), `boards`.

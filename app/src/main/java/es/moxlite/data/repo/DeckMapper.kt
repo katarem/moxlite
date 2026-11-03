@@ -76,6 +76,10 @@ object DeckMapper {
             originalPublicId = existing?.originalPublicId,
             fetchedAt = System.currentTimeMillis(),
             imagesCachedAt = existing?.imagesCachedAt,
+            bracket = dto.effectiveBracket ?: existing?.bracket,
+            hubs = dto.hubNames.takeIf { it.isNotEmpty() }?.let { DeckEntity.joinNames(it) } ?: existing?.hubs.orEmpty(),
+            commanders = commanderNames(cards),
+            viewedAt = existing?.viewedAt ?: 0,
         )
         return deck to cards
     }
@@ -97,8 +101,15 @@ object DeckMapper {
             viewCount = s.viewCount,
             mainboardCount = s.mainboardCount,
             remoteUpdatedAt = s.lastUpdatedAtUtc,
+            bracket = s.effectiveBracket,
+            hubs = DeckEntity.joinNames(s.hubNames),
+            commanders = DeckEntity.joinNames(s.commanderNames),
         )
     }
+
+    /** Nombres de los comandantes de un mazo (board "commanders"), para buscar y filtrar. */
+    fun commanderNames(cards: List<DeckCardEntity>): String =
+        DeckEntity.joinNames(cards.filter { it.board == Boards.COMMANDERS }.map { it.name })
 
     fun fromScryfall(deckId: String, board: String, card: ScryCard, quantity: Int) = DeckCardEntity(
         deckId = deckId,

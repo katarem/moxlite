@@ -38,6 +38,27 @@ class MoxfieldServiceTest {
     }
 
     @Test
+    fun `DeckQuery manda comandante, bracket y tipo, y el texto tambien como filter`() {
+        val params = DeckQuery(
+            text = "atraxa",
+            commanderCardId = "abc12",
+            minBracket = 3,
+            maxBracket = 3,
+            hubName = " Tokens ",
+            sortType = "likes",
+        ).toParams()
+        assertEquals("atraxa", params["filter"])
+        assertEquals("abc12", params["commanderCardId"])
+        assertEquals("3", params["minBracket"])
+        assertEquals("3", params["maxBracket"])
+        assertEquals("Tokens", params["hubName"])
+        assertEquals("likes", params["sortType"])
+        assertFalse(DeckQuery().toParams().containsKey("commanderCardId"))
+        assertFalse(DeckQuery().toParams().containsKey("minBracket"))
+        assertFalse(DeckQuery().toParams().containsKey("hubName"))
+    }
+
+    @Test
     fun `parsePublicId acepta enlaces con o sin esquema y rechaza textos cortos`() {
         assertEquals("ABCdef_12-3", MoxfieldIds.parsePublicId("moxfield.com/decks/ABCdef_12-3?foo=bar"))
         assertEquals("ABCdef", MoxfieldIds.parsePublicId("  ABCdef  "))

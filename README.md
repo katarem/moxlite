@@ -10,13 +10,14 @@ Cliente Android personal para Moxfield: consultar y gestionar mazos **con y sin 
 |---|---|
 | Iniciar sesión **una vez** (WebView) y quedarse con la sesión: se renueva sola | ✅ |
 | Cuenta: ver estado de la sesión, cambios pendientes y cerrar sesión | ✅ |
-| "Mis mazos": todos los tuyos (también privados y ocultos) + los guardados en el móvil | ✅ |
+| "Mis mazos" por pestañas (míos, guardados, recientes) con buscador, filtros y orden | ✅ |
 | **Subir cambios a Moxfield**: crear, importar, añadir, cantidades, mover, quitar, renombrar, cambiar arte | ✅ (rutas de la web, sin probar en vivo, ver abajo) |
 | Ver cualquier mazo público (por enlace, búsqueda o usuario), con miniatura en las listas | ✅ |
+| Buscar mazos con filtros (formato, colores, comandante, bracket, tipo) y orden (actualizados, nuevos, populares, vistos) | ✅ |
 | Vistas del mazo: texto, lista, cuadrícula y carta completa; agrupar por tipo/coste/color y ordenar | ✅ |
 | Añadir cartas con buscador con imágenes y en cualquier idioma ("rayo" o "lightning bolt") | ✅ |
 | Elegir arte / edición de cada carta | ✅ |
-| Compartir un mazo con un enlace que otra persona con Moxlite abre en su app | ✅ |
+| Compartir un mazo con un enlace `moxlite://` o un código que otra persona con Moxlite abre en su app | ✅ |
 | Guardar mazos sin conexión (cartas + imágenes) y guardar los tuyos automáticamente | ✅ |
 | Bloqueo de LaLiga a Cloudflare: aviso claro, cola que se sube sola después y proxy opcional | ✅ |
 | Idioma de la app (español / inglés) e idioma de las cartas (imágenes y nombres) | ✅ |
@@ -48,16 +49,18 @@ Durante los partidos, las operadoras españolas bloquean IPs de Cloudflare por o
 1. **Todo lo que abres queda en el móvil** y "Guardar mis mazos sin conexión" (activado por defecto) descarga tus mazos con imágenes en segundo plano.
 2. **Los cambios no se pierden**: se aplican en local y se suben solos cuando Moxfield vuelve (WorkManager reintenta con espera creciente).
 3. **El error dice lo que pasa** ("posible bloqueo de LaLiga") en vez de un fallo genérico.
-4. **Enlaces compartidos que llevan el mazo dentro**: quien lo recibe lo ve aunque Moxfield no cargue.
+4. **Enlaces y códigos compartidos que llevan el mazo dentro**: quien lo recibe lo ve aunque Moxfield no cargue.
 5. **Proxy opcional** (HTTP o SOCKS, Ajustes → Proxy): si tienes un servidor fuera de España (un VPS, el router de otra casa…), todo el tráfico de la app (y el WebView) sale por ahí. Un proxy dentro de España no sirve.
 
 ### Compartir mazos
 
-"Compartir enlace" genera `https://moxfield.com/decks/<id>#moxlite=<mazo comprimido>`. Es un enlace normal (se puede tocar en WhatsApp), lleva el mazo dentro en el fragmento `#` (no llega a ningún servidor) y:
+"Compartir enlace" genera `moxlite://deck/<código>`, donde el código es el mazo entero comprimido (no pasa por Moxfield ni por ninguna web):
 
-- con Moxlite se abre en la app (hay que activar una vez **Ajustes → Abrir enlaces de Moxfield con Moxlite**, porque Android no deja verificar un dominio que no es nuestro);
-- sin Moxlite abre el mazo en la web de Moxfield;
-- si el mazo solo existe en el móvil de quien lo manda, Moxlite ofrece importarlo.
+- al tocarlo se abre directamente en Moxlite, aunque Moxfield esté bloqueado o el mazo sea privado;
+- donde no se pueda tocar (WhatsApp no convierte en enlace los esquemas propios), se copia y se pega en **Mis mazos → + → Abrir enlace o código**: vale el enlace, el mensaje entero o solo el código, y si está en el portapapeles ya aparece puesto;
+- **Copiar código** (menú del mazo) copia solo el código;
+- si el mazo solo existe en el móvil de quien lo manda, Moxlite ofrece importarlo;
+- los enlaces antiguos (`…#moxlite=<código>`) se siguen abriendo.
 
 ### Escritura: qué está verificado
 
@@ -108,6 +111,7 @@ Tests unitarios JVM en `app/src/test` (JUnit 4 + `kotlinx-coroutines-test`), sin
 | `data/sync/WriteParsingTest` | Respuestas de búsqueda de cartas de Moxfield, nombres, errores de escritura |
 | `data/session/AuthResultTest` | Respuesta de renovación de sesión (token, usuario, caducidad) |
 | `domain/ShareLinkTest` | Enlaces para compartir: ida y vuelta, mazos locales, datos corruptos |
+| `domain/DeckFiltersTest` | Filtros y orden de mazos (colores, comandante, bracket, tipo), campos nuevos de la búsqueda |
 | `ui/deck/DeckLayoutTest` | Agrupar y ordenar cartas para las vistas, nombres e imágenes traducidos |
 | `i18n/I18nTest` | Idioma de la app y textos en español/inglés |
 | `data/session/ApiTrafficLogTest` | Registro de API: filtrado, redacción de secretos, duplicados, límite |

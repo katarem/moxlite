@@ -3,6 +3,8 @@ package es.moxlite.i18n
 import es.moxlite.data.settings.DeckGrouping
 import es.moxlite.data.settings.DeckSorting
 import es.moxlite.data.settings.DeckViewMode
+import es.moxlite.domain.ColorMatch
+import es.moxlite.domain.DeckSort
 
 /** English. */
 object En : Strings {
@@ -100,19 +102,16 @@ object En : Strings {
     override fun opPrinting(name: String, set: String, number: String) = "Art for $name: $set $number"
 
     override val myDecks = "My decks"
-    override val yoursAndSaved = "Yours and saved"
-    override val savedOnPhone = "On this phone"
-    override val recentlyViewed = "Recently viewed"
     override val noDecksYet =
         "No decks on this phone yet.\nLog in to fetch yours, search for decks or open a Moxfield link."
     override val noDecksYetLoggedIn = "No decks yet. Pull down to fetch them from Moxfield or create one with +."
     override fun decksFound(n: Int) = if (n == 1) "1 deck found" else "$n decks found"
     override val newDeck = "New deck"
     override val importTextList = "Import text list"
-    override val openMoxfieldLink = "Open Moxfield link"
-    override val openMoxfieldDeck = "Open Moxfield deck"
-    override val deckLinkOrId = "Deck link or id"
-    override val notAMoxfieldLink = "That doesn't look like a Moxfield link"
+    override val openMoxfieldLink = "Open link or code"
+    override val openMoxfieldDeck = "Open deck"
+    override val deckLinkOrId = "Moxlite link or code, or Moxfield link"
+    override val notAMoxfieldLink = "That is not a deck link or code"
     override val untitledDeck = "Untitled deck"
     override val onlyOnPhone = "Only on this phone"
     override val availableOffline = "Available offline"
@@ -174,7 +173,10 @@ object En : Strings {
     override val savingOffline = "Saving cards and images for offline use…"
     override val noLongerOffline = "No longer saved offline"
     override val shareLink = "Share link"
-    override fun shareMessage(deckName: String, link: String) = "$deckName\n$link\n(Open it with Moxlite to see it even if Moxfield won't load)"
+    override fun shareMessage(deckName: String, link: String) =
+        "$deckName\n$link\n(Open it with Moxlite. If you can't tap it, copy it and paste it in Moxlite → + → Open link or code)"
+    override val copyCode = "Copy code"
+    override val codeCopied = "Code copied: paste it in Moxlite → + → Open link or code"
     override fun shareTitle(deckName: String) = "Share $deckName"
     override val exportText = "Export as text"
     override val exportQuestion =
@@ -235,12 +237,73 @@ object En : Strings {
     override val searchDecks = "Search decks"
     override val searchDecksPlaceholder = "Name, commander, card…"
     override val searchDecksIntro = "Search public Moxfield decks. The ones you open are kept as recent."
-    override fun deckSortLabel(sortType: String) = when (sortType) {
-        "likes" -> "Most liked"
-        "views" -> "Most viewed"
-        "created" -> "Newest"
-        else -> "Recently updated"
+    override fun deckSortLabel(sort: DeckSort) = when (sort) {
+        DeckSort.UPDATED -> "Recently updated"
+        DeckSort.CREATED -> "Newest"
+        DeckSort.LIKES -> "Most popular"
+        DeckSort.VIEWS -> "Most viewed"
+        DeckSort.VIEWED -> "Recently opened"
+        DeckSort.NAME -> "Name"
     }
+    override val searchDecksColorsHint = "Moxfield can't filter by colour: it's done here, fetching more pages, so it may take a moment."
+
+    override val filterSort = "Sort"
+    override val filterFormat = "Format"
+    override fun formatLabel(format: String) = when (format.lowercase()) {
+        "commander" -> "Commander"
+        "standard" -> "Standard"
+        "pioneer" -> "Pioneer"
+        "modern" -> "Modern"
+        "legacy" -> "Legacy"
+        "vintage" -> "Vintage"
+        "pauper" -> "Pauper"
+        "premodern" -> "Premodern"
+        "timeless" -> "Timeless"
+        "historic" -> "Historic"
+        "brawl" -> "Brawl"
+        "historicbrawl" -> "Historic Brawl"
+        "oathbreaker" -> "Oathbreaker"
+        "pauperedh", "paupercommander" -> "Pauper Commander"
+        "duelcommander" -> "Duel Commander"
+        "predh" -> "PreDH"
+        "none" -> "No format"
+        "" -> ""
+        else -> format.replaceFirstChar { it.uppercase() }
+    }
+    override val filterColors = "Colours"
+    override val colorless = "Colourless"
+    override fun colorMatchLabel(match: ColorMatch) = when (match) {
+        ColorMatch.EXACT -> "Exactly"
+        ColorMatch.INCLUDES -> "At least"
+        ColorMatch.WITHIN -> "At most"
+    }
+    override val filterCommander = "Commander"
+    override val commanderPlaceholder = "Commander name (any language)"
+    override fun commanderNotFound(name: String) = "Moxfield doesn't recognise \"$name\" as a card"
+    override val filterBracket = "Bracket"
+    override fun bracketLabel(bracket: Int) = when (bracket) {
+        1 -> "1 · Exhibition"
+        2 -> "2 · Core"
+        3 -> "3 · Upgraded"
+        4 -> "4 · Optimized"
+        5 -> "5 · cEDH"
+        else -> bracket.toString()
+    }
+    override val filterHub = "Type"
+    override val hubPlaceholder = "Deck type (Tokens, Aristocrats, Budget…)"
+    override val anyOption = "Any"
+    override val clearFilters = "Clear filters"
+    override val applyFilters = "Apply"
+    override val noDecksMatch = "No decks match the search and filters."
+
+    override val tabMine = "Mine"
+    override val tabSaved = "Saved"
+    override val tabRecent = "Recent"
+    override val searchMyDecksPlaceholder = "Search by name, author or commander"
+    override val noSavedDecks = "You haven't saved anyone else's decks yet. Open one and tap the download icon to keep it offline."
+    override val noRecentDecks = "Decks you open show up here."
+    override val noOwnDecksNoAccount =
+        "Your Moxfield decks and the ones you create on the phone show up here.\nLog in to bring yours or create one with +."
     override val users = "Users"
     override val searchUserPlaceholder = "Search Moxfield users"
     override val searchUserHint = "Press search on the keyboard to go straight to that user"
@@ -306,7 +369,7 @@ object En : Strings {
     override val saveAndEnable = "Save and enable"
     override val openLinksWithApp = "Open Moxfield links with Moxlite"
     override val openLinksWithAppHint =
-        "Turn on \"Open supported links\" so deck links (including the ones people share with you) open in the app"
+        "Turn on \"Open supported links\" so Moxfield deck links open in the app (Moxlite links always do)"
     override val storage = "Storage"
     override val savedImages = "Saved card images"
     override val about = "About"

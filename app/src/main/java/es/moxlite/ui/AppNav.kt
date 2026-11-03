@@ -32,6 +32,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import es.moxlite.IncomingLink
+import es.moxlite.domain.DeckSnapshot
 import es.moxlite.i18n.Strings
 import es.moxlite.ui.account.AccountScreen
 import es.moxlite.ui.account.WelcomeScreen
@@ -93,23 +94,25 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
         if (!container.settings.onboarded.value && !container.session.state.value.hasAccount) Routes.WELCOME else Routes.DECKS
     }
 
+    /** Mazo recibido por enlace o código de Moxlite. */
+    fun openShared(snapshot: DeckSnapshot) {
+        val id = snapshot.id
+        if (id == null) {
+            // Mazo que solo existía en el móvil de quien lo comparte: se ofrece importarlo.
+            importDraft = ImportDraft(name = snapshot.n, format = snapshot.f.ifBlank { "commander" }, text = snapshot.t)
+            nav.navigate(Routes.IMPORT)
+        } else {
+            // Copia del enlace por si Moxfield no responde; si responde, se actualiza al abrir.
+            container.appScope.launch { runCatching { container.deckRepository.seedFromSnapshot(snapshot) } }
+            nav.navigate(Routes.deck(id))
+        }
+    }
+
     LaunchedEffect(incoming) {
         when (incoming) {
             is IncomingLink.Deck -> nav.navigate(Routes.deck(incoming.publicId))
             is IncomingLink.ImportText -> { importDraft = ImportDraft(text = incoming.text); nav.navigate(Routes.IMPORT) }
-            is IncomingLink.Shared -> {
-                val snapshot = incoming.snapshot
-                val id = snapshot.id
-                if (id == null) {
-                    // Mazo que solo existía en el móvil de quien lo comparte: se ofrece importarlo.
-                    importDraft = ImportDraft(name = snapshot.n, format = snapshot.f.ifBlank { "commander" }, text = snapshot.t)
-                    nav.navigate(Routes.IMPORT)
-                } else {
-                    // Copia del enlace por si Moxfield no responde; si responde, se actualiza al abrir.
-                    container.appScope.launch { runCatching { container.deckRepository.seedFromSnapshot(snapshot) } }
-                    nav.navigate(Routes.deck(id))
-                }
-            }
+            is IncomingLink.Shared -> openShared(incoming.snapshot)
             null -> return@LaunchedEffect
         }
         onIncomingHandled()
@@ -153,6 +156,7 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
                 composable(Routes.DECKS) {
                     MyDecksScreen(
                         openDeck = { nav.navigate(Routes.deck(it)) },
+                        openShared = ::openShared,
                         openImport = { importDraft = ImportDraft(); nav.navigate(Routes.IMPORT) },
                         openLogin = { nav.navigate(Routes.web(WebMode.LOGIN)) },
                         openAccount = { nav.navigate(Routes.ACCOUNT) },
