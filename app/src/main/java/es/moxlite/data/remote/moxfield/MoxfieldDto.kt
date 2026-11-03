@@ -1,5 +1,6 @@
 package es.moxlite.data.remote.moxfield
 
+import es.moxlite.i18n.I18n
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -86,6 +87,8 @@ data class MoxDeckDto(
     val viewCount: Int = 0,
     val colorIdentity: List<String> = emptyList(),
     val publicUrl: String? = null,
+    /** Carta destacada (id de impresión de Moxfield). */
+    val mainCardId: String? = null,
     val boards: Map<String, MoxBoardDto> = emptyMap(),
 )
 
@@ -104,6 +107,8 @@ data class MoxDeckSummaryDto(
     val mainboardCount: Int = 0,
     val lastUpdatedAtUtc: String? = null,
     val publicUrl: String? = null,
+    /** Carta destacada: id de impresión de Moxfield (sirve para la miniatura). */
+    val mainCardId: String? = null,
 )
 
 @Serializable
@@ -130,17 +135,16 @@ object Boards {
 
     val editable = listOf(COMMANDERS, MAIN, SIDE, MAYBE)
 
-    fun label(board: String): String = when (board) {
-        COMMANDERS -> "Comandante"
-        "partners" -> "Partner"
-        COMPANIONS -> "Compañero"
-        "signatureSpells" -> "Hechizos firma"
-        MAIN -> "Mazo"
-        SIDE -> "Banquillo"
-        MAYBE -> "Quizás"
-        "tokens" -> "Fichas"
-        else -> board.replaceFirstChar { it.uppercase() }
-    }
+    fun label(board: String): String = I18n.strings.boardLabel(board)
 
     fun sortIndex(board: String): Int = order.indexOf(board).let { if (it < 0) order.size else it }
+}
+
+/**
+ * Imágenes que sirve Moxfield a partir del id de impresión (`card.id`, `mainCardId`). Las
+ * búsquedas de mazos solo traen `mainCardId`, no el id de Scryfall.
+ */
+object MoxfieldImages {
+    fun artCrop(moxCardId: String) = "https://assets.moxfield.net/cards/card-$moxCardId-art_crop.webp"
+    fun normal(moxCardId: String) = "https://assets.moxfield.net/cards/card-$moxCardId-normal.webp"
 }

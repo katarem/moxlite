@@ -1,21 +1,35 @@
 package es.moxlite.ui.deck
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,67 +40,139 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import es.moxlite.data.remote.moxfield.Boards
+import es.moxlite.data.remote.scryfall.ScryCard
+import es.moxlite.data.remote.scryfall.ScryfallImages
+import es.moxlite.ui.common.LocalStrings
+import es.moxlite.ui.common.MessageBox
 
 /**
- * Añadir carta buscando en Scryfall (necesita conexión). La carta se añade en local
- * al momento y queda en la cola para subirla a Moxfield.
+ * Añadir carta buscando en Scryfall en cualquier idioma ("rayo" o "lightning bolt"), con la
+ * imagen de cada resultado. La carta se añade en local al momento y se sube a Moxfield.
  */
 @Composable
 fun AddCardDialog(vm: DeckViewModel, onDismiss: () -> Unit) {
-    val suggestions by vm.suggestions.collectAsStateWithLifecycle()
-    var query by remember { mutableStateOf("") }
-    var chosen by remember { mutableStateOf<String?>(null) }
+    val t = LocalStrings.current
+    val search by vm.search.collectAsStateWithLifecycle()
+    var chosen by remember { mutableStateOf<ScryCard?>(null) }
     var board by remember { mutableStateOf(Boards.MAIN) }
     var quantity by remember { mutableIntStateOf(1) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Añadir carta") },
-        text = {
-            Column {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().imePadding()) {
+                Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, t.close) }
+                    Text(t.addCard, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                }
                 OutlinedTextField(
-                    value = chosen ?: query,
-                    onValueChange = { query = it; chosen = null; vm.suggest(it) },
-                    label = { Text("Nombre (en inglés)") },
+                    value = search.query,
+                    onValueChange = { chosen = null; vm.searchCards(it) },
+                    placeholder = { Text(t.searchCardPlaceholder) },
+                    leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                    supportingText = { Text(t.searchCardHint) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 )
-                if (chosen == null && suggestions.isNotEmpty()) {
-                    LazyColumn(Modifier.heightIn(max = 220.dp)) {
-                        items(suggestions) { name ->
-                            Text(
-                                name,
-                                modifier = Modifier.fillMaxWidth().clickable { chosen = name }.padding(vertical = 10.dp),
-                            )
-                            HorizontalDivider()
+
+                Box(Modifier.weight(1f)) {
+                    when {
+                        search.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                        search.error != null -> MessageBox(search.error.orEmpty())
+                        search.query.trim().length >= 2 && search.results.isEmpty() -> MessageBox(t.noResults, isError = false)
+                        else -> LazyColumn(Modifier.fillMaxSize()) {
+                            items(search.results, key = { it.id }) { card ->
+                                SearchResultRow(card, selected = chosen?.id == card.id) { chosen = card }
+                                HorizontalDivider()
+                            }
                         }
                     }
                 }
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Boards.editable.forEach { b ->
-                        FilterChip(selected = board == b, onClick = { board = b }, label = { Text(Boards.label(b)) })
+
+                // Destino y cantidad de la carta elegida.
+                chosen?.let { card ->
+                    Surface(tonalElevation = 3.dp) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            Text(card.displayName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Row(
+                                Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Boards.editable.forEach { b ->
+                                    FilterChip(selected = board == b, onClick = { board = b }, label = { Text(Boards.label(b)) })
+                                }
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(t.quantity, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                TextButton(onClick = { if (quantity > 1) quantity-- }) { Text("−") }
+                                Text("$quantity")
+                                TextButton(onClick = { quantity++ }) { Text("+") }
+                                Spacer(Modifier.width(8.dp))
+                                Button(onClick = {
+                                    vm.addCard(card, board, quantity)
+                                    chosen = null
+                                    quantity = 1
+                                }) { Text(t.add) }
+                            }
+                        }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Cantidad", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { if (quantity > 1) quantity-- }) { Text("−") }
-                    Text("$quantity")
-                    TextButton(onClick = { quantity++ }) { Text("+") }
-                }
             }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = chosen != null,
-                onClick = { chosen?.let { vm.addCardByName(it, board, quantity) }; onDismiss() },
-            ) { Text("Añadir") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
-    )
+        }
+    }
+}
+
+@Composable
+private fun SearchResultRow(card: ScryCard, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(width = 56.dp, height = 78.dp).clip(RoundedCornerShape(4.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            AsyncImage(
+                model = card.imageUrl(ScryfallImages.Size.SMALL),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(card.displayName, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (card.displayName != card.name) {
+                Text(card.name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
+            Text(
+                listOfNotNull(
+                    ManaText.plain(card.manaCost.orEmpty()).ifBlank { null },
+                    card.typeLine,
+                ).joinToString("  "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                listOfNotNull(card.set.uppercase(), card.lang.takeIf { it != "en" }?.uppercase()).joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }

@@ -24,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -33,10 +32,15 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import es.moxlite.IncomingLink
+import es.moxlite.i18n.Strings
+import es.moxlite.ui.account.AccountScreen
+import es.moxlite.ui.account.WelcomeScreen
+import es.moxlite.ui.common.LocalStrings
 import es.moxlite.ui.common.OfflineBanner
 import es.moxlite.ui.common.appContainer
 import es.moxlite.ui.deck.DeckScreen
 import es.moxlite.ui.decks.MyDecksScreen
+import es.moxlite.ui.importer.ImportDraft
 import es.moxlite.ui.importer.ImportScreen
 import es.moxlite.ui.search.SearchScreen
 import es.moxlite.ui.settings.ApiLogScreen
@@ -46,12 +50,15 @@ import es.moxlite.ui.users.UserDecksScreen
 import es.moxlite.ui.users.UsersScreen
 import es.moxlite.ui.web.WebMode
 import es.moxlite.ui.web.WebScreen
+import kotlinx.coroutines.launch
 
 object Routes {
+    const val WELCOME = "welcome"
     const val DECKS = "decks"
     const val SEARCH = "search"
     const val USERS = "users"
     const val SETTINGS = "settings"
+    const val ACCOUNT = "account"
     const val DECK = "deck/{id}"
     const val USER = "user/{name}"
     const val WEB = "web/{mode}?url={url}"
@@ -64,26 +71,45 @@ object Routes {
         "web/${mode.name}" + (url?.let { "?url=${Uri.encode(it)}" } ?: "")
 }
 
-private data class Tab(val route: String, val label: String, val icon: ImageVector)
+private data class Tab(val route: String, val label: (Strings) -> String, val icon: ImageVector)
 
 private val tabs = listOf(
-    Tab(Routes.DECKS, "Mis mazos", Icons.Outlined.Style),
-    Tab(Routes.SEARCH, "Buscar", Icons.Outlined.Search),
-    Tab(Routes.USERS, "Usuarios", Icons.Outlined.Group),
-    Tab(Routes.SETTINGS, "Ajustes", Icons.Outlined.Settings),
+    Tab(Routes.DECKS, { it.tabMyDecks }, Icons.Outlined.Style),
+    Tab(Routes.SEARCH, { it.tabSearch }, Icons.Outlined.Search),
+    Tab(Routes.USERS, { it.tabUsers }, Icons.Outlined.Group),
+    Tab(Routes.SETTINGS, { it.tabSettings }, Icons.Outlined.Settings),
 )
 
 @Composable
 fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
     val nav = rememberNavController()
     val container = appContainer()
+    val t = LocalStrings.current
     val online by container.connectivity.online.collectAsStateWithLifecycle()
-    var importDraft by remember { mutableStateOf("") }
+    var importDraft by remember { mutableStateOf(ImportDraft()) }
+
+    // Primera vez y sin cuenta: pantalla de bienvenida para iniciar sesión.
+    val start = remember {
+        if (!container.settings.onboarded.value && !container.session.state.value.hasAccount) Routes.WELCOME else Routes.DECKS
+    }
 
     LaunchedEffect(incoming) {
         when (incoming) {
             is IncomingLink.Deck -> nav.navigate(Routes.deck(incoming.publicId))
-            is IncomingLink.ImportText -> { importDraft = incoming.text; nav.navigate(Routes.IMPORT) }
+            is IncomingLink.ImportText -> { importDraft = ImportDraft(text = incoming.text); nav.navigate(Routes.IMPORT) }
+            is IncomingLink.Shared -> {
+                val snapshot = incoming.snapshot
+                val id = snapshot.id
+                if (id == null) {
+                    // Mazo que solo existía en el móvil de quien lo comparte: se ofrece importarlo.
+                    importDraft = ImportDraft(name = snapshot.n, format = snapshot.f.ifBlank { "commander" }, text = snapshot.t)
+                    nav.navigate(Routes.IMPORT)
+                } else {
+                    // Copia del enlace por si Moxfield no responde; si responde, se actualiza al abrir.
+                    container.appScope.launch { runCatching { container.deckRepository.seedFromSnapshot(snapshot) } }
+                    nav.navigate(Routes.deck(id))
+                }
+            }
             null -> return@LaunchedEffect
         }
         onIncomingHandled()
@@ -102,7 +128,7 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
                             selected = currentRoute == tab.route,
                             onClick = { nav.switchTab(tab.route) },
                             icon = { Icon(tab.icon, contentDescription = null) },
-                            label = { Text(tab.label) },
+                            label = { Text(tab.label(t)) },
                         )
                     }
                 }
@@ -114,12 +140,22 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
                 .padding(bottom = padding.calculateBottomPadding())
                 .consumeWindowInsets(PaddingValues(bottom = padding.calculateBottomPadding())),
         ) {
-            NavHost(nav, startDestination = Routes.DECKS, modifier = Modifier.weight(1f)) {
+            NavHost(nav, startDestination = start, modifier = Modifier.weight(1f)) {
+                composable(Routes.WELCOME) {
+                    WelcomeScreen(
+                        openLogin = { nav.navigate(Routes.web(WebMode.LOGIN)) },
+                        onDone = {
+                            container.settings.setOnboarded(true)
+                            nav.navigate(Routes.DECKS) { popUpTo(Routes.WELCOME) { inclusive = true } }
+                        },
+                    )
+                }
                 composable(Routes.DECKS) {
                     MyDecksScreen(
                         openDeck = { nav.navigate(Routes.deck(it)) },
-                        openImport = { importDraft = ""; nav.navigate(Routes.IMPORT) },
+                        openImport = { importDraft = ImportDraft(); nav.navigate(Routes.IMPORT) },
                         openLogin = { nav.navigate(Routes.web(WebMode.LOGIN)) },
+                        openAccount = { nav.navigate(Routes.ACCOUNT) },
                     )
                 }
                 composable(Routes.SEARCH) {
@@ -132,7 +168,15 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
                     SettingsScreen(
                         openWeb = { nav.navigate(Routes.web(it)) },
                         openApiLog = { nav.navigate(Routes.API_LOG) },
+                        openAccount = { nav.navigate(Routes.ACCOUNT) },
+                    )
+                }
+                composable(Routes.ACCOUNT) {
+                    AccountScreen(
+                        onBack = { nav.popBackStack() },
+                        openLogin = { nav.navigate(Routes.web(WebMode.LOGIN)) },
                         openDeck = { nav.navigate(Routes.deck(it)) },
+                        openUser = { nav.navigate(Routes.user(it)) },
                     )
                 }
                 composable(Routes.DECK, arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
@@ -142,6 +186,7 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
                         openDeck = { nav.navigate(Routes.deck(it)) { popUpTo(Routes.DECK) { inclusive = true } } },
                         openUser = { nav.navigate(Routes.user(it)) },
                         openWeb = { url -> nav.navigate(Routes.web(WebMode.BROWSE, url)) },
+                        openLogin = { nav.navigate(Routes.web(WebMode.LOGIN)) },
                     )
                 }
                 composable(Routes.USER, arguments = listOf(navArgument("name") { type = NavType.StringType })) { entry ->
@@ -167,7 +212,7 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
                 }
                 composable(Routes.IMPORT) {
                     ImportScreen(
-                        initialText = importDraft,
+                        draft = importDraft,
                         onBack = { nav.popBackStack() },
                         onImported = { nav.navigate(Routes.deck(it)) { popUpTo(Routes.IMPORT) { inclusive = true } } },
                     )
@@ -184,7 +229,8 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
 }
 
 private fun NavHostController.switchTab(route: String) = navigate(route) {
-    popUpTo(graph.findStartDestination().id) { saveState = true }
+    // "Mis mazos" es siempre la raíz (la bienvenida se quita al terminarla).
+    popUpTo(Routes.DECKS) { saveState = true }
     launchSingleTop = true
     restoreState = true
 }

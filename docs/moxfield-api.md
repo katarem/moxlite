@@ -45,24 +45,54 @@ Referer: https://www.moxfield.com/
 
 Funciona de forma intermitente: si Cloudflare endurece la regla, falla.
 
-## 2. Lo que NO está documentado (escritura y login)
+## 2. Sesión y escritura (lo que usa la app)
 
-### Login
+> Actualizado 2026-11-03. Rutas sacadas del código de la web de Moxfield por proyectos de la
+> comunidad ([commander-lab](https://github.com/andrewgari/commander-lab/pull/56),
+> [solring-extension](https://github.com/mashb1t/solring-extension),
+> [moxfield-enhancement-suite](https://github.com/w-geissinger/moxfield-enhancement-suite),
+> [is-in-deck](https://github.com/vankus4/is-in-deck), [moxtui](https://github.com/apaz-cli/moxtui)).
+> PUT/DELETE de cantidades están confirmados por una extensión en uso; el resto no se ha probado
+> desde la app contra una cuenta real.
 
-- `POST https://api2.moxfield.com/v2/account/token` con `{ "userName", "password" }`.
-- **Exige además un token de reCAPTCHA/Cloudflare** (`"token field is required"`). Incluso usuarios con User-Agent en lista blanca de Moxfield no consiguen el token por esta vía.
-- Conclusión: **el login directo usuario/contraseña desde la app no es viable**. Hay que hacerlo en un WebView (el usuario resuelve el captcha) y capturar el token / cookies.
+### Login y renovación
 
-### Crear, editar, copiar mazos, colección, likes, carpetas…
+- `POST /v2/account/token` exige un token de Cloudflare Turnstile: no se puede automatizar. Se inicia sesión en un WebView.
+- `POST /v1/startup/authenticated` con `{"ignoreCookie":false,"isAppLogin":false}` y la cookie de sesión (HttpOnly) devuelve
+  `{ "refresh": { "access_token", "refresh_token", "user_name", "user_id", "expiration", "expires_in_minutes", … } }`.
+  Es lo que hace la web al abrirse: la app lo usa al terminar el login, al caducar el token y tras un 401.
+- Peticiones autenticadas: `Authorization: Bearer <access_token>`.
 
-No hay rutas fiables publicadas. Para conseguirlas hay que **capturarlas del tráfico real** del navegador estando logueado:
+### Escritura
 
-1. Abrir moxfield.com en Chrome de escritorio, DevTools → pestaña Network, filtro `api2.moxfield.com`.
-2. Hacer cada acción una vez: crear mazo, añadir carta, cambiar cantidad, mover a sideboard, borrar carta, renombrar, cambiar visibilidad, copiar ("Clone") un mazo ajeno, borrar mazo, ver "Your Decks".
-3. Exportar como HAR ("Save all as HAR with content").
-4. **Antes de compartirlo, borrar las cabeceras `Authorization` y `Cookie`** (o pasármelo y lo limpio yo sin mirar tokens, pero mejor que no viajen).
+Todas usan el **id interno** del mazo (`deck.id`, no el publicId) y llevan `X-Public-Deck-ID: <publicId>` y
+`X-Deck-Version: <version>` (la del último GET; el servidor la incrementa en cada cambio). `cardId` es el id de
+impresión de Moxfield (`card.id`), no el de Scryfall.
 
-Con ese HAR se escribe el cliente de escritura exacto en vez de adivinar.
+| Acción | Petición | Cuerpo |
+|---|---|---|
+| Crear mazo | `POST /v2/decks` | `{ name, format, visibility, description }` → mazo con `publicId` e `id` |
+| Datos del mazo (nombre…) | `PUT /v2/decks/{id}` | `{ name, format, description, visibility }` |
+| Importar texto | `POST /v3/decks/{id}/import` | `{ importText, replaceAll, usePrefPrintings }` |
+| Añadir carta | `POST /v2/decks/{id}/cards/{board}` | `{ cardId, quantity, usePrefPrinting }` |
+| Cantidad absoluta | `PUT /v2/decks/{id}/cards/{board}/{cardId}` | `{ quantity }` |
+| Quitar carta | `DELETE /v2/decks/{id}/cards/{board}/{cardId}` | — |
+| Mover de board | `POST /v4/decks/{id}/{from}/cards/{cardId}/move-to/{to}?quantity=n` | `{}` (la app cae a añadir + quitar si falla) |
+| Cambiar edición | `PUT /v2/decks/{id}/cards/{cardId}/edition` | `{ newEditionCardId, finish, isAlter }` |
+| Borrar mazo | `DELETE /v1/decks/{id}` | — (no usado) |
+| Clonar | `POST /v2/decks/{publicId}/clone` | `{ name, includePrimer, includeTags }` (no usado: la copia se crea + importa) |
+
+### Lectura con sesión y cartas
+
+| Petición | Para qué |
+|---|---|
+| `GET /v2/decks/personal/search?pageNumber&pageSize&sortType&sortDirection&filter` | Mis mazos, incluidos privados |
+| `GET /v2/cards/lookup?name=&set=&cn=` | Id de impresión de una carta (exacta) |
+| `GET /v2/cards/search?q=` | Búsqueda con sintaxis de Scryfall |
+| `GET /v3/cards/editions/{uniqueCardId}` | Todas las impresiones (no usado: se usa Scryfall) |
+
+Imagen de una carta por id de Moxfield: `https://assets.moxfield.net/cards/card-{cardId}-art_crop.webp` (también `-normal.webp`).
+Las búsquedas de mazos traen `mainCardId`, que sirve para la miniatura.
 
 ## 3. Aviso sobre las condiciones de Moxfield
 

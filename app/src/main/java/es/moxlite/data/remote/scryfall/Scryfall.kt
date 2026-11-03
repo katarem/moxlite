@@ -7,6 +7,7 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.QueryMap
 
 @Serializable
 data class ScryImageUris(
@@ -23,6 +24,7 @@ data class ScryFace(
     @SerialName("type_line") val typeLine: String? = null,
     @SerialName("oracle_text") val oracleText: String? = null,
     @SerialName("image_uris") val imageUris: ScryImageUris? = null,
+    @SerialName("printed_name") val printedName: String? = null,
 )
 
 @Serializable
@@ -31,7 +33,12 @@ data class ScryPrices(val eur: String? = null, val usd: String? = null)
 @Serializable
 data class ScryCard(
     val id: String = "",
+    @SerialName("oracle_id") val oracleId: String? = null,
     val name: String = "",
+    /** Nombre impreso si la carta no está en inglés. */
+    @SerialName("printed_name") val printedName: String? = null,
+    val lang: String = "en",
+    @SerialName("released_at") val releasedAt: String? = null,
     val set: String = "",
     @SerialName("set_name") val setName: String = "",
     @SerialName("collector_number") val collectorNumber: String = "",
@@ -47,6 +54,24 @@ data class ScryCard(
     val prices: ScryPrices = ScryPrices(),
 ) {
     val hasBackImage: Boolean get() = imageUris == null && cardFaces.size > 1
+
+    /** Nombre como aparece en la carta (en su idioma). */
+    val displayName: String
+        get() = printedName?.takeIf { it.isNotBlank() }
+            ?: cardFaces.mapNotNull { it.printedName?.takeIf { n -> n.isNotBlank() } }.takeIf { it.isNotEmpty() }?.joinToString(" // ")
+            ?: name
+
+    /** Imagen pequeña: la de la API si viene, si no la del patrón de URL. */
+    fun imageUrl(size: ScryfallImages.Size = ScryfallImages.Size.NORMAL): String {
+        val uris = imageUris ?: cardFaces.firstOrNull()?.imageUris
+        val fromApi = when (size) {
+            ScryfallImages.Size.SMALL -> uris?.small
+            ScryfallImages.Size.NORMAL -> uris?.normal
+            ScryfallImages.Size.LARGE -> uris?.large
+            ScryfallImages.Size.ART_CROP -> uris?.artCrop
+        }
+        return fromApi ?: ScryfallImages.url(id, size)
+    }
     val fullOracle: String?
         get() = oracleText ?: cardFaces.takeIf { it.isNotEmpty() }
             ?.joinToString("\n//\n") { "${it.name}\n${it.oracleText.orEmpty()}" }
@@ -86,6 +111,14 @@ interface ScryfallService {
         @Query("order") order: String = "name",
         @Query("page") page: Int = 1,
     ): ScryList<ScryCard>
+
+    /** Búsqueda con parámetros libres (unique, order, dir, include_multilingual…). */
+    @GET("cards/search")
+    suspend fun searchAdvanced(@QueryMap params: Map<String, String>): ScryList<ScryCard>
+
+    /** Una impresión concreta (en inglés). */
+    @GET("cards/{set}/{number}")
+    suspend fun printing(@Path("set") set: String, @Path("number") number: String): ScryCard
 
     @GET("cards/named")
     suspend fun named(@Query("exact") exact: String): ScryCard

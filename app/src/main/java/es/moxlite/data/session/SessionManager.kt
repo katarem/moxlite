@@ -9,31 +9,41 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
 data class SessionState(
-    /** Token Bearer capturado del WebView (null = sin sesión). */
+    /** Token Bearer (dura poco: se renueva solo con la cookie de sesión, ver [MoxfieldAuth]). */
     val accessToken: String? = null,
-    /** Expiración del token en ms epoch, si el JWT la trae. */
+    /** Expiración del token en ms epoch. */
     val expiresAt: Long? = null,
-    /** Usuario de Moxfield: se usa para "Mis mazos". Puede escribirlo el usuario a mano. */
+    /** Usuario de Moxfield de la cuenta con la que se inició sesión. */
     val userName: String = "",
+    val userId: String? = null,
+    /** Refresh token que devuelve Moxfield; respaldo por si el WebView pierde la cookie. */
+    val refreshToken: String? = null,
+    /** La renovación falló de forma definitiva: hay que volver a iniciar sesión. */
+    val needsLogin: Boolean = false,
 ) {
-    val isLoggedIn: Boolean get() = accessToken != null && !isExpired
-    val isExpired: Boolean get() = expiresAt != null && System.currentTimeMillis() > expiresAt - 30_000
+    val isExpired: Boolean get() = expiresAt != null && System.currentTimeMillis() > expiresAt - 60_000
+
+    /** Token usable ahora mismo. */
+    val hasValidToken: Boolean get() = accessToken != null && !isExpired
+
+    /** Hay una cuenta iniciada (aunque el token concreto haya caducado y se vaya a renovar). */
+    val hasAccount: Boolean get() = userName.isNotBlank() && !needsLogin && (accessToken != null || refreshToken != null)
 }
 
 /**
  * Guarda la sesión de Moxfield.
  *
- * El login directo (usuario/contraseña contra /v2/account/token) exige un token de captcha,
- * así que la sesión se obtiene iniciando sesión en un WebView y capturando la cabecera
- * Authorization que manda el propio frontend de Moxfield (ver [MoxfieldWebBridge]).
+ * El login directo exige captcha, así que se inicia sesión una vez en un WebView. Moxfield deja
+ * una cookie de sesión (HttpOnly) y con ella [MoxfieldAuth] pide tokens nuevos cuando caducan,
+ * igual que hace la web al abrirla: no hay que volver a iniciar sesión.
  *
- * Nota: SharedPreferences en almacenamiento privado de la app. Para uso personal es suficiente;
- * si la app se distribuye, cifrar con Keystore.
+ * SharedPreferences en almacenamiento privado de la app (uso personal).
  */
 class SessionManager(private val context: Context) {
 
@@ -44,6 +54,9 @@ class SessionManager(private val context: Context) {
             accessToken = prefs.getString(KEY_TOKEN, null),
             expiresAt = prefs.getLong(KEY_EXP, 0L).takeIf { it > 0 },
             userName = prefs.getString(KEY_USER, "").orEmpty(),
+            userId = prefs.getString(KEY_USER_ID, null),
+            refreshToken = prefs.getString(KEY_REFRESH, null),
+            needsLogin = prefs.getBoolean(KEY_NEEDS_LOGIN, false),
         )
     )
     val state: StateFlow<SessionState> = _state.asStateFlow()
@@ -58,35 +71,57 @@ class SessionManager(private val context: Context) {
         )
     }
 
+    /** Token visto en una petición de la web (WebView). */
     fun onTokenCaptured(token: String) {
-        if (token.isBlank() || token == _state.value.accessToken) return
+        if (token.isBlank() || token == "undefined" || token == _state.value.accessToken) return
         val claims = decodeJwt(token)
-        val exp = claims?.get("exp")?.jsonPrimitive?.longOrNull?.times(1000)
+        val exp = claims?.get("exp")?.let { runCatching { it.jsonPrimitive.longOrNull }.getOrNull() }?.times(1000)
         val claimUser = USER_CLAIMS.firstNotNullOfOrNull { key ->
             runCatching { claims?.get(key)?.jsonPrimitive?.content }.getOrNull()?.takeIf { it.isNotBlank() }
         }
         _state.update { current ->
             current.copy(
                 accessToken = token,
-                expiresAt = exp,
+                expiresAt = exp ?: current.expiresAt,
+                // El nombre bueno llega con la renovación (user_name); esto es solo un respaldo.
                 userName = current.userName.ifBlank { claimUser.orEmpty() },
+                needsLogin = false,
             )
         }
         persist()
     }
 
-    fun setUserName(userName: String) {
-        _state.update { it.copy(userName = userName.trim()) }
+    /** Respuesta de /v1/startup/authenticated ya interpretada. */
+    fun onRefreshed(result: AuthResult) {
+        _state.update { current ->
+            current.copy(
+                accessToken = result.accessToken,
+                expiresAt = result.expiresAt ?: decodeJwt(result.accessToken)
+                    ?.get("exp")?.let { runCatching { it.jsonPrimitive.longOrNull }.getOrNull() }?.times(1000),
+                userName = result.userName?.takeIf { it.isNotBlank() } ?: current.userName,
+                userId = result.userId ?: current.userId,
+                refreshToken = result.refreshToken ?: current.refreshToken,
+                needsLogin = false,
+            )
+        }
         persist()
     }
 
-    fun markExpired() {
+    /** El token actual ya no vale (401). La cuenta se conserva: se intentará renovar. */
+    fun dropAccessToken() {
         _state.update { it.copy(accessToken = null, expiresAt = null) }
         persist()
     }
 
+    /** Moxfield ya no acepta la sesión: hay que volver a entrar. */
+    fun markNeedsLogin() {
+        _state.update { it.copy(accessToken = null, expiresAt = null, refreshToken = null, needsLogin = it.userName.isNotBlank()) }
+        persist()
+    }
+
     fun logout() {
-        markExpired()
+        _state.value = SessionState()
+        persist()
         val cm = CookieManager.getInstance()
         cm.removeAllCookies(null)
         cm.flush()
@@ -98,10 +133,13 @@ class SessionManager(private val context: Context) {
             .putString(KEY_TOKEN, s.accessToken)
             .putLong(KEY_EXP, s.expiresAt ?: 0L)
             .putString(KEY_USER, s.userName)
+            .putString(KEY_USER_ID, s.userId)
+            .putString(KEY_REFRESH, s.refreshToken)
+            .putBoolean(KEY_NEEDS_LOGIN, s.needsLogin)
             .apply()
     }
 
-    private fun decodeJwt(token: String) = runCatching {
+    private fun decodeJwt(token: String): JsonObject? = runCatching {
         val payload = token.split(".")[1]
         val bytes = Base64.decode(payload, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
         Http.json.parseToJsonElement(String(bytes)).jsonObject
@@ -111,10 +149,13 @@ class SessionManager(private val context: Context) {
         const val KEY_TOKEN = "access_token"
         const val KEY_EXP = "expires_at"
         const val KEY_USER = "user_name"
+        const val KEY_USER_ID = "user_id"
+        const val KEY_REFRESH = "refresh_token"
+        const val KEY_NEEDS_LOGIN = "needs_login"
 
         /** Claims donde podría venir el nombre de usuario (no documentado: se prueban varios). */
         val USER_CLAIMS = listOf(
-            "userName", "username", "preferred_username", "unique_name", "name",
+            "userName", "username", "user_name", "preferred_username", "unique_name", "name",
             "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name",
         )
     }

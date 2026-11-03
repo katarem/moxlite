@@ -1,6 +1,7 @@
 package es.moxlite.data.local
 
 import androidx.room.Entity
+import es.moxlite.i18n.I18n
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -19,6 +20,8 @@ data class DeckEntity(
     val colorIdentity: String = "",
     /** Carta destacada (comandante o primera del mazo) para la miniatura. */
     val featuredScryfallId: String? = null,
+    /** Carta destacada como id de impresión de Moxfield (lo único que traen las búsquedas). */
+    val featuredMoxCardId: String? = null,
     val likeCount: Int = 0,
     val viewCount: Int = 0,
     val mainboardCount: Int = 0,
@@ -81,17 +84,7 @@ data class DeckCardEntity(
             "Creature", "Planeswalker", "Battle", "Instant", "Sorcery", "Artifact", "Enchantment", "Land",
         )
 
-        fun typeLabel(type: String) = when (type) {
-            "Creature" -> "Criaturas"
-            "Planeswalker" -> "Planeswalkers"
-            "Battle" -> "Batallas"
-            "Instant" -> "Instantáneos"
-            "Sorcery" -> "Conjuros"
-            "Artifact" -> "Artefactos"
-            "Enchantment" -> "Encantamientos"
-            "Land" -> "Tierras"
-            else -> "Otros"
-        }
+        fun typeLabel(type: String) = I18n.strings.typeLabel(type)
     }
 }
 
@@ -115,4 +108,18 @@ data class FollowedUserEntity(
     @PrimaryKey val userName: String,
     val displayName: String = "",
     val addedAt: Long = System.currentTimeMillis(),
+)
+
+/**
+ * Caché de la misma impresión en otro idioma (para mostrar imágenes y nombres en el idioma de
+ * cartas elegido). [scryfallId] null = esa impresión no existe en ese idioma.
+ */
+@Entity(tableName = "card_localizations", primaryKeys = ["setCode", "collectorNumber", "lang"])
+data class CardLocalizationEntity(
+    val setCode: String,
+    val collectorNumber: String,
+    val lang: String,
+    val scryfallId: String? = null,
+    val printedName: String? = null,
+    val checkedAt: Long = System.currentTimeMillis(),
 )

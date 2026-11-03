@@ -8,7 +8,15 @@ import es.moxlite.domain.DeckLine
 import kotlinx.coroutines.delay
 import retrofit2.HttpException
 
-/** Datos de carta desde Scryfall (búsqueda, autocompletado, resolución de listas). */
+/** Clave de una impresión: edición (en minúsculas) y número de coleccionista. */
+data class PrintingKey(val set: String, val collectorNumber: String) {
+    companion object {
+        fun of(set: String, collectorNumber: String?) =
+            collectorNumber?.takeIf { set.isNotBlank() && it.isNotBlank() }?.let { PrintingKey(set.lowercase(), it) }
+    }
+}
+
+/** Datos de carta desde Scryfall (búsqueda, autocompletado, resolución de listas, idiomas). */
 class CardRepository(private val api: ScryfallService) {
 
     suspend fun autocomplete(query: String): List<String> =
@@ -19,6 +27,62 @@ class CardRepository(private val api: ScryfallService) {
     /** Búsqueda con sintaxis de Scryfall (p. ej. "t:dragon c:r"). Sin resultados = lista vacía. */
     suspend fun search(query: String): List<ScryCard> = try {
         api.search(query).data
+    } catch (e: HttpException) {
+        if (e.code() == 404) emptyList() else throw e
+    }
+
+    /**
+     * Búsqueda que no depende del idioma: "rayo" encuentra la impresión en español de Lightning
+     * Bolt y "lightning bolt" la inglesa. Admite también sintaxis de Scryfall.
+     */
+    suspend fun searchAnyLanguage(text: String): List<ScryCard> {
+        val q = text.trim()
+        if (q.length < 2) return emptyList()
+        return searchOrEmpty(
+            mapOf("q" to q, "include_multilingual" to "true", "unique" to "cards", "order" to "name")
+        ).take(MAX_RESULTS)
+    }
+
+    /** Todas las impresiones (artes) de una carta, de la más nueva a la más antigua. */
+    suspend fun printings(cardName: String): List<ScryCard> = searchOrEmpty(
+        mapOf(
+            "q" to "!\"${cardName.replace("\"", "")}\"",
+            "unique" to "prints",
+            "order" to "released",
+            "dir" to "desc",
+            "include_extras" to "true",
+        )
+    )
+
+    /** La impresión inglesa equivalente (mismo set y número) de una carta en otro idioma. */
+    suspend fun englishPrinting(card: ScryCard): ScryCard =
+        if (card.lang == "en") card
+        else runCatching { api.printing(card.set, card.collectorNumber) }.getOrDefault(card)
+
+    /**
+     * Busca las mismas impresiones en otro idioma, por lotes. Las que no existen en ese idioma
+     * vuelven como null (se muestran en inglés).
+     */
+    suspend fun localize(keys: Collection<PrintingKey>, lang: String): Map<PrintingKey, ScryCard?> {
+        val result = LinkedHashMap<PrintingKey, ScryCard?>()
+        if (lang == "en") return result
+        keys.distinct().chunked(LOCALIZE_BATCH).forEachIndexed { index, chunk ->
+            if (index > 0) delay(120) // ~10 peticiones/s como máximo
+            val query = "lang:$lang (" + chunk.joinToString(" or ") {
+                "(set:${it.set} cn:\"${it.collectorNumber.replace("\"", "")}\")"
+            } + ")"
+            val found = searchOrEmpty(
+                mapOf("q" to query, "unique" to "prints", "include_multilingual" to "true")
+            ).filter { it.lang == lang }
+            chunk.forEach { key ->
+                result[key] = found.firstOrNull { it.set.equals(key.set, true) && it.collectorNumber == key.collectorNumber }
+            }
+        }
+        return result
+    }
+
+    private suspend fun searchOrEmpty(params: Map<String, String>): List<ScryCard> = try {
+        api.searchAdvanced(params).data
     } catch (e: HttpException) {
         if (e.code() == 404) emptyList() else throw e
     }
@@ -56,5 +120,10 @@ class CardRepository(private val api: ScryfallService) {
         val a = cardName.lowercase()
         val b = wanted.lowercase()
         return a == b || a.substringBefore(" // ") == b || a == b.substringBefore(" // ")
+    }
+
+    private companion object {
+        const val MAX_RESULTS = 60
+        const val LOCALIZE_BATCH = 15
     }
 }

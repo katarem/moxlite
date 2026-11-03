@@ -1,5 +1,6 @@
 package es.moxlite.ui.search
 
+import es.moxlite.ui.common.LocalStrings
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -106,8 +107,9 @@ fun DeckResultsList(
     onLoadMore: () -> Unit,
     onRetry: () -> Unit,
     modifier: Modifier = Modifier,
-    emptyText: String = "Sin resultados",
+    emptyText: String? = null,
 ) {
+    val t = LocalStrings.current
     val listState = rememberLazyListState()
     val nearEnd by remember {
         derivedStateOf {
@@ -120,9 +122,9 @@ fun DeckResultsList(
     Box(modifier.fillMaxSize()) {
         when {
             state.error != null && state.results.isEmpty() ->
-                MessageBox(state.error, actionLabel = "Reintentar", onAction = onRetry)
+                MessageBox(state.error, actionLabel = t.retry, onAction = onRetry)
             state.searched && !state.loading && state.results.isEmpty() ->
-                MessageBox(emptyText, isError = false)
+                MessageBox(emptyText ?: t.noResults, isError = false)
             else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                 items(state.results, key = { it.publicId }) { DeckRow(it.toRow()) { openDeck(it.publicId) } }
                 if (state.loading) {
@@ -137,27 +139,23 @@ fun DeckResultsList(
     }
 }
 
-private val SORTS = listOf(
-    "updated" to "Recientes",
-    "likes" to "Más gustados",
-    "views" to "Más vistos",
-    "created" to "Nuevos",
-)
+private val SORTS = listOf("updated", "likes", "views", "created")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SearchScreen(openDeck: (String) -> Unit) {
     val container = appContainer()
+    val t = LocalStrings.current
     val vm: DeckSearchViewModel = viewModel { DeckSearchViewModel(container.deckRepository) }
     val state by vm.state.collectAsStateWithLifecycle()
     var text by remember { mutableStateOf(state.query.text) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Buscar mazos") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(t.searchDecks) }) }) { padding ->
         Column(Modifier.padding(padding)) {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                placeholder = { Text("Nombre, comandante, carta…") },
+                placeholder = { Text(t.searchDecksPlaceholder) },
                 leadingIcon = { Icon(Icons.Outlined.Search, null) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -168,11 +166,11 @@ fun SearchScreen(openDeck: (String) -> Unit) {
                 Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                SORTS.forEach { (key, label) ->
+                SORTS.forEach { key ->
                     FilterChip(
                         selected = state.query.sortType == key,
                         onClick = { vm.search(state.query.copy(text = text, sortType = key)) },
-                        label = { Text(label) },
+                        label = { Text(t.deckSortLabel(key)) },
                     )
                 }
             }
@@ -192,7 +190,7 @@ fun SearchScreen(openDeck: (String) -> Unit) {
                 }
             }
             if (!state.searched) {
-                MessageBox("Busca mazos públicos de Moxfield. Los que abras se guardan como recientes.", isError = false)
+                MessageBox(t.searchDecksIntro, isError = false)
             } else {
                 DeckResultsList(
                     state = state,

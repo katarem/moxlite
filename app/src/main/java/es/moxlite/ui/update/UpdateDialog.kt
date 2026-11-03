@@ -1,5 +1,6 @@
 package es.moxlite.ui.update
 
+import es.moxlite.ui.common.LocalStrings
 import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -48,6 +49,7 @@ fun UpdatePrompt(updater: AppUpdater) {
         onStopOrDispose { }
     }
 
+    val t = LocalStrings.current
     val state by updater.state.collectAsStateWithLifecycle()
     val visible by updater.dialogVisible.collectAsStateWithLifecycle()
     if (!visible) return
@@ -57,11 +59,11 @@ fun UpdatePrompt(updater: AppUpdater) {
             info = s.info,
             current = updater.currentVersion,
             onDismiss = updater::dismiss,
-            confirm = { Button(onClick = { updater.download(s.info) }) { Text("Actualizar") } },
+            confirm = { Button(onClick = { updater.download(s.info) }) { Text(t.updUpdate) } },
             dismiss = {
                 Row {
-                    TextButton(onClick = { updater.skip(s.info) }) { Text("Omitir") }
-                    TextButton(onClick = updater::dismiss) { Text("Más tarde") }
+                    TextButton(onClick = { updater.skip(s.info) }) { Text(t.updSkip) }
+                    TextButton(onClick = updater::dismiss) { Text(t.later) }
                 }
             },
         )
@@ -73,7 +75,7 @@ fun UpdatePrompt(updater: AppUpdater) {
             body = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     val progress = s.progress
-                    Text(progress?.let { "Descargando… ${(it * 100).toInt()} %" } ?: "Descargando…")
+                    Text(progress?.let { t.updDownloadingPercent((it * 100).toInt()) } ?: t.updDownloading)
                     if (progress != null) {
                         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
                     } else {
@@ -81,8 +83,8 @@ fun UpdatePrompt(updater: AppUpdater) {
                     }
                 }
             },
-            confirm = { TextButton(onClick = updater::dismiss) { Text("Ocultar") } },
-            dismiss = { TextButton(onClick = updater::cancelDownload) { Text("Cancelar") } },
+            confirm = { TextButton(onClick = updater::dismiss) { Text(t.hide) } },
+            dismiss = { TextButton(onClick = updater::cancelDownload) { Text(t.cancel) } },
         )
 
         is UpdateState.ReadyToInstall -> UpdateDialog(
@@ -91,32 +93,32 @@ fun UpdatePrompt(updater: AppUpdater) {
             onDismiss = updater::dismiss,
             body = {
                 Text(
-                    "Descargada. Si Android lo pide, permite instalar aplicaciones desde Moxlite y vuelve a pulsar Instalar.",
+                    t.updDownloadedHint,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
-            confirm = { Button(onClick = { updater.install(s.info, s.apk) }) { Text("Instalar") } },
-            dismiss = { TextButton(onClick = updater::dismiss) { Text("Más tarde") } },
+            confirm = { Button(onClick = { updater.install(s.info, s.apk) }) { Text(t.updInstall) } },
+            dismiss = { TextButton(onClick = updater::dismiss) { Text(t.later) } },
         )
 
         is UpdateState.Failed -> {
             val info = s.info
             AlertDialog(
                 onDismissRequest = updater::dismiss,
-                title = { Text("Actualización") },
+                title = { Text(t.updTitle) },
                 text = { Text(s.message) },
                 confirmButton = {
                     if (info != null) {
-                        Button(onClick = { updater.download(info) }) { Text("Reintentar") }
+                        Button(onClick = { updater.download(info) }) { Text(t.retry) }
                     } else {
-                        TextButton(onClick = updater::dismiss) { Text("Cerrar") }
+                        TextButton(onClick = updater::dismiss) { Text(t.close) }
                     }
                 },
                 dismissButton = {
                     if (info != null) {
                         Row {
-                            TextButton(onClick = { updater.openReleasePage(info) }) { Text("Abrir en GitHub") }
-                            TextButton(onClick = updater::dismiss) { Text("Cerrar") }
+                            TextButton(onClick = { updater.openReleasePage(info) }) { Text(t.updOpenGithub) }
+                            TextButton(onClick = updater::dismiss) { Text(t.close) }
                         }
                     }
                 },
@@ -136,12 +138,13 @@ private fun UpdateDialog(
     dismiss: @Composable () -> Unit,
     body: (@Composable () -> Unit)? = null,
 ) {
+    val t = LocalStrings.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Moxlite ${info.version} disponible") },
+        title = { Text(t.updAvailableTitle(info.version)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Tienes la $current.", style = MaterialTheme.typography.bodyMedium)
+                Text(t.updYouHave(current), style = MaterialTheme.typography.bodyMedium)
                 if (body != null) {
                     body()
                 } else if (info.notes.isNotBlank()) {

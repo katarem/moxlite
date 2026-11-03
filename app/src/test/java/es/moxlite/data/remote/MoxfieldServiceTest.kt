@@ -80,4 +80,30 @@ class MoxfieldServiceTest {
         assertFalse(MoxCardDto(layout = "split").hasBackImage)
         assertFalse(MoxCardDto(layout = null).hasBackImage)
     }
+
+    @Test
+    fun `la busqueda personal usa filter en vez de q`() {
+        val params = DeckQuery(text = " goblins ", pageSize = 100).toPersonalParams()
+        assertEquals("goblins", params["filter"])
+        assertFalse(params.containsKey("q"))
+        assertEquals("100", params["pageSize"])
+    }
+
+    @Test
+    fun `urls de imagen de Moxfield a partir del id de impresion`() {
+        assertEquals(
+            "https://assets.moxfield.net/cards/card-abc12-art_crop.webp",
+            es.moxlite.data.remote.moxfield.MoxfieldImages.artCrop("abc12"),
+        )
+        assertEquals("https://moxfield.com/decks/PUB", MoxfieldIds.deckUrl("PUB"))
+    }
+
+    @Test
+    fun `parsea mainCardId de los resumenes de busqueda`() {
+        val json = """{"data":[{"publicId":"A","name":"Uno","mainCardId":"zz9","visibility":"private"}]}"""
+        val page = Http.json.decodeFromString(
+            es.moxlite.data.remote.moxfield.MoxPage.serializer(es.moxlite.data.remote.moxfield.MoxDeckSummaryDto.serializer()), json,
+        )
+        assertEquals("zz9", page.data.single().mainCardId)
+    }
 }

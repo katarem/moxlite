@@ -2,6 +2,7 @@ package es.moxlite.ui.deck
 
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,33 +17,46 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Subject
+import androidx.compose.material.icons.automirrored.outlined.ViewList
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.DownloadForOffline
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.OpenInBrowser
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Warning
-import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -67,26 +81,40 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
+import es.moxlite.data.local.CardLocalizationEntity
 import es.moxlite.data.local.DeckCardEntity
 import es.moxlite.data.local.DeckEntity
 import es.moxlite.data.remote.MoxError
 import es.moxlite.data.remote.moxfield.Boards
+import es.moxlite.data.remote.moxfield.MoxfieldIds
+import es.moxlite.data.remote.scryfall.ScryCard
 import es.moxlite.data.remote.scryfall.ScryfallImages
 import es.moxlite.data.remote.userMessage
+import es.moxlite.data.repo.PrintingKey
+import es.moxlite.data.settings.DeckGrouping
+import es.moxlite.data.settings.DeckSorting
+import es.moxlite.data.settings.DeckViewMode
 import es.moxlite.ui.common.ColorPips
+import es.moxlite.ui.common.LocalStrings
 import es.moxlite.ui.common.MessageBox
 import es.moxlite.ui.common.SectionHeader
 import es.moxlite.ui.common.appContainer
+import es.moxlite.ui.common.featuredImageUrl
 import es.moxlite.ui.decks.TextInputDialog
 import java.util.Locale
+
+private typealias Localized = Map<PrintingKey, CardLocalizationEntity>
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,17 +124,27 @@ fun DeckScreen(
     openDeck: (String) -> Unit,
     openUser: (String) -> Unit,
     openWeb: (url: String) -> Unit,
+    openLogin: () -> Unit,
 ) {
     val container = appContainer()
+    val t = LocalStrings.current
     val vm: DeckViewModel = viewModel(key = "deck-$publicId") { DeckViewModel(container, publicId) }
     val deck by vm.deck.collectAsStateWithLifecycle()
     val cards by vm.cards.collectAsStateWithLifecycle()
+    val localized by vm.localized.collectAsStateWithLifecycle()
+    val canEdit by vm.canEdit.collectAsStateWithLifecycle()
     val loading by vm.loading.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
+    val printings by vm.printings.collectAsStateWithLifecycle()
+    val viewMode by container.settings.viewMode.collectAsStateWithLifecycle()
+    val grouping by container.settings.grouping.collectAsStateWithLifecycle()
+    val sorting by container.settings.sorting.collectAsStateWithLifecycle()
+    val session by container.session.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
 
-    var editing by rememberSaveable { mutableStateOf(false) }
+    var editingRequested by rememberSaveable { mutableStateOf(false) }
+    val editing = editingRequested && canEdit
     var menu by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf<String?>(null) } // copy | rename | export | discard | remove | add
     var selected by remember { mutableStateOf<DeckCardEntity?>(null) }
@@ -122,7 +160,7 @@ fun DeckScreen(
                         Intent(Intent.ACTION_SEND).setType("text/plain")
                             .putExtra(Intent.EXTRA_SUBJECT, e.title)
                             .putExtra(Intent.EXTRA_TEXT, e.text),
-                        "Exportar ${e.title}",
+                        t.shareTitle(e.title),
                     )
                 )
             }
@@ -133,49 +171,61 @@ fun DeckScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(d?.name ?: "Mazo", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Atrás") } },
+                title = { Text(d?.name ?: t.deck, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, t.back) } },
                 actions = {
                     if (d != null && !d.isLocalOnly) {
                         IconButton(onClick = { vm.toggleSaved() }) {
                             Icon(
                                 if (d.isSaved) Icons.Filled.DownloadForOffline else Icons.Outlined.DownloadForOffline,
-                                contentDescription = if (d.isSaved) "Guardado sin conexión" else "Guardar sin conexión",
+                                contentDescription = if (d.isSaved) t.savedOffline else t.saveOffline,
                                 tint = if (d.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, "Actualizar") }
+                        IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, t.refresh) }
                     }
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "Más") }
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, t.more) }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        MenuItem("Copiar mazo", Icons.Outlined.ContentCopy) { menu = false; dialog = "copy" }
-                        MenuItem("Renombrar", Icons.Outlined.Edit) { menu = false; dialog = "rename" }
-                        MenuItem("Exportar como texto", Icons.Outlined.Share) { menu = false; dialog = "export" }
+                        if (d != null) {
+                            MenuItem(t.shareLink, Icons.Outlined.Link) { menu = false; vm.shareLink() }
+                            MenuItem(t.exportText, Icons.Outlined.Share) { menu = false; dialog = "export" }
+                            MenuItem(t.copyDeck, Icons.Outlined.ContentCopy) { menu = false; dialog = "copy" }
+                            if (canEdit) MenuItem(t.rename, Icons.Outlined.Edit) { menu = false; dialog = "rename" }
+                        }
                         if (d != null && !d.isLocalOnly) {
-                            MenuItem("Ver en Moxfield (web)", Icons.Outlined.OpenInBrowser) {
-                                menu = false; openWeb("https://moxfield.com/decks/${d.publicId}")
+                            MenuItem(t.viewOnMoxfieldWeb, Icons.Outlined.OpenInBrowser) {
+                                menu = false; openWeb(MoxfieldIds.deckUrl(d.publicId))
                             }
                         }
                         if (d?.authorUserName?.isNotBlank() == true) {
-                            MenuItem("Más mazos de @${d.authorUserName}", Icons.Outlined.Person) { menu = false; openUser(d.authorUserName) }
+                            MenuItem(t.moreDecksBy(d.authorUserName), Icons.Outlined.Person) { menu = false; openUser(d.authorUserName) }
                         }
-                        if (d?.hasLocalChanges == true) {
-                            MenuItem("Descartar cambios locales", Icons.Outlined.Restore) { menu = false; dialog = "discard" }
+                        if (d?.hasLocalChanges == true && !d.isLocalOnly) {
+                            MenuItem(t.discardLocalChanges, Icons.Outlined.Restore) { menu = false; dialog = "discard" }
                         }
-                        MenuItem("Quitar del móvil", Icons.Outlined.DeleteOutline) { menu = false; dialog = "remove" }
+                        MenuItem(t.removeFromPhone, Icons.Outlined.DeleteOutline) { menu = false; dialog = "remove" }
                     }
                 },
             )
         },
         floatingActionButton = {
-            if (d != null) {
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    if (editing) {
-                        SmallFloatingActionButton(onClick = { dialog = "add" }) { Icon(Icons.Outlined.Add, "Añadir carta") }
+            if (d != null && (cards.isNotEmpty() || d.isFullyLoaded)) {
+                if (canEdit) {
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (editing) {
+                            SmallFloatingActionButton(onClick = { dialog = "add" }) { Icon(Icons.Outlined.Add, t.addCard) }
+                        }
+                        FloatingActionButton(onClick = { editingRequested = !editingRequested }) {
+                            Icon(if (editing) Icons.Outlined.Check else Icons.Outlined.Edit, if (editing) t.finishEditing else t.edit)
+                        }
                     }
-                    FloatingActionButton(onClick = { editing = !editing }) {
-                        Icon(if (editing) Icons.Outlined.Check else Icons.Outlined.Edit, if (editing) "Terminar edición" else "Editar")
-                    }
+                } else {
+                    // Mazo ajeno: como en Moxfield, se copia para editarlo.
+                    ExtendedFloatingActionButton(
+                        onClick = { dialog = "copy" },
+                        icon = { Icon(Icons.Outlined.ContentCopy, null) },
+                        text = { Text(t.copyToEdit) },
+                    )
                 }
             }
         },
@@ -184,16 +234,31 @@ fun DeckScreen(
         Column(Modifier.padding(padding).fillMaxSize()) {
             if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
             when {
-                d != null && (cards.isNotEmpty() || d.isFullyLoaded) ->
-                    DeckContent(d, cards, editing, onCardClick = { selected = it }, onQty = vm::setQuantity, openUser = openUser)
+                d != null && (cards.isNotEmpty() || d.isFullyLoaded) -> DeckContent(
+                    deck = d,
+                    cards = cards,
+                    localized = localized,
+                    editing = editing,
+                    viewMode = viewMode,
+                    grouping = grouping,
+                    sorting = sorting,
+                    onViewMode = container.settings::setViewMode,
+                    onGrouping = container.settings::setGrouping,
+                    onSorting = container.settings::setSorting,
+                    onCardClick = { selected = it },
+                    onQty = vm::setQuantity,
+                    openUser = openUser,
+                    needsLogin = d.hasLocalChanges && !session.hasAccount,
+                    openLogin = openLogin,
+                )
                 loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 error != null -> {
                     val e = error!!
                     MessageBox(
                         text = e.userMessage(),
-                        actionLabel = if (e is MoxError.CloudflareBlocked) "Abrir Moxfield en la app" else "Reintentar",
+                        actionLabel = if (e is MoxError.CloudflareBlocked) t.openMoxfieldInApp else t.retry,
                         onAction = {
-                            if (e is MoxError.CloudflareBlocked) openWeb("https://moxfield.com/decks/$publicId") else vm.refresh()
+                            if (e is MoxError.CloudflareBlocked) openWeb(MoxfieldIds.deckUrl(publicId)) else vm.refresh()
                         },
                     )
                 }
@@ -202,72 +267,88 @@ fun DeckScreen(
     }
 
     selected?.let { card ->
-        // Siempre la versión actual de la fila (la cantidad puede haber cambiado).
+        // Siempre la versión actual de la fila (la cantidad o el arte pueden haber cambiado).
         val current = cards.firstOrNull { it.board == card.board && it.cardKey == card.cardKey }
         if (current == null) selected = null
         else CardDetailDialog(
             card = current,
+            localized = localized,
             editing = editing,
+            canChangeArt = canEdit,
             onDismiss = { selected = null },
             onQty = { vm.setQuantity(current, it) },
             onMove = { board -> vm.move(current, board); selected = null },
+            onChangeArt = { vm.loadPrintings(current) },
+        )
+    }
+
+    printings?.let { state ->
+        val card = selected?.let { s -> cards.firstOrNull { it.board == s.board && it.cardKey == s.cardKey } }
+        PrintingsDialog(
+            state = state,
+            currentScryfallId = card?.scryfallId,
+            onDismiss = vm::closePrintings,
+            onPick = { printing -> card?.let { vm.changePrinting(it, printing) } },
         )
     }
 
     when (dialog) {
         "copy" -> TextInputDialog(
-            title = "Copiar mazo",
-            label = "Nombre de la copia",
-            initial = "Copia de ${d?.name.orEmpty()}",
-            confirmLabel = "Copiar",
+            title = t.copyDeck,
+            label = t.copyName,
+            initial = t.copyOf(d?.name.orEmpty()),
+            confirmLabel = t.copy,
             onDismiss = { dialog = null },
             onConfirm = { dialog = null; vm.copy(it) },
         )
         "rename" -> TextInputDialog(
-            title = "Renombrar",
-            label = "Nombre",
+            title = t.rename,
+            label = t.name,
             initial = d?.name.orEmpty(),
             onDismiss = { dialog = null },
             onConfirm = { dialog = null; vm.rename(it) },
         )
         "export" -> AlertDialog(
             onDismissRequest = { dialog = null },
-            title = { Text("Exportar como texto") },
-            text = { Text("¿Incluir edición y número de cada carta? Sirve para reimportar las mismas impresiones en Moxfield, Arena u otras webs.") },
-            confirmButton = { TextButton(onClick = { dialog = null; vm.export(true) }) { Text("Con ediciones") } },
-            dismissButton = { TextButton(onClick = { dialog = null; vm.export(false) }) { Text("Solo nombres") } },
+            title = { Text(t.exportText) },
+            text = { Text(t.exportQuestion) },
+            confirmButton = { TextButton(onClick = { dialog = null; vm.export(true) }) { Text(t.withPrintings) } },
+            dismissButton = { TextButton(onClick = { dialog = null; vm.export(false) }) { Text(t.namesOnly) } },
         )
         "discard" -> ConfirmDialog(
-            title = "Descartar cambios locales",
-            text = if (d?.isLocalOnly == true) "Este mazo solo existe en el móvil: se borrará."
-            else "Se perderán los cambios hechos en el móvil y se descargará la versión de Moxfield.",
+            title = t.discardLocalChanges,
+            text = t.discardConfirm,
             onDismiss = { dialog = null },
             onConfirm = { dialog = null; vm.discardLocalChanges() },
         )
         "remove" -> ConfirmDialog(
-            title = "Quitar del móvil",
-            text = "Se borra la copia local" + (if (d?.hasLocalChanges == true) " y sus cambios sin subir" else "") +
-                ". En Moxfield no se toca nada.",
+            title = t.removeFromPhone,
+            text = when {
+                d?.isLocalOnly == true -> t.removeLocalOnlyConfirm
+                d?.hasLocalChanges == true -> t.removeWithChangesConfirm
+                else -> t.removeConfirm
+            },
             onDismiss = { dialog = null },
             onConfirm = { dialog = null; vm.removeFromDevice() },
         )
-        "add" -> AddCardDialog(vm = vm, onDismiss = { dialog = null })
+        "add" -> AddCardDialog(vm = vm, onDismiss = { dialog = null; vm.clearSearch() })
     }
 }
 
 @Composable
-private fun MenuItem(text: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun MenuItem(text: String, icon: ImageVector, onClick: () -> Unit) {
     DropdownMenuItem(text = { Text(text) }, leadingIcon = { Icon(icon, null) }, onClick = onClick)
 }
 
 @Composable
 fun ConfirmDialog(title: String, text: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    val t = LocalStrings.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { Text(text) },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("Aceptar") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(t.accept) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t.cancel) } },
     )
 }
 
@@ -275,11 +356,21 @@ fun ConfirmDialog(title: String, text: String, onDismiss: () -> Unit, onConfirm:
 private fun DeckContent(
     deck: DeckEntity,
     cards: List<DeckCardEntity>,
+    localized: Localized,
     editing: Boolean,
+    viewMode: DeckViewMode,
+    grouping: DeckGrouping,
+    sorting: DeckSorting,
+    onViewMode: (DeckViewMode) -> Unit,
+    onGrouping: (DeckGrouping) -> Unit,
+    onSorting: (DeckSorting) -> Unit,
     onCardClick: (DeckCardEntity) -> Unit,
     onQty: (DeckCardEntity, Int) -> Unit,
     openUser: (String) -> Unit,
+    needsLogin: Boolean,
+    openLogin: () -> Unit,
 ) {
+    val t = LocalStrings.current
     val boards = (cards.map { it.board } + if (editing) Boards.editable else emptyList())
         .distinct()
         .sortedBy(Boards::sortIndex)
@@ -287,9 +378,11 @@ private fun DeckContent(
     var tab by rememberSaveable(deck.publicId) { mutableStateOf(Boards.MAIN) }
     val currentBoard = if (tab in boards) tab else boards.firstOrNull() ?: Boards.MAIN
     val boardCards = cards.filter { it.board == currentBoard }
+    val groups = remember(boardCards, grouping, sorting, t) { DeckLayout.group(boardCards, grouping, sorting, t) }
+    val columns = if (viewMode == DeckViewMode.GRID) 3 else 1
 
     LazyColumn(Modifier.fillMaxSize()) {
-        item { DeckHeader(deck, cards, openUser) }
+        item { DeckHeader(deck, cards, openUser, needsLogin, openLogin) }
         if (boards.size > 1) {
             item {
                 ScrollableTabRow(selectedTabIndex = boards.indexOf(currentBoard).coerceAtLeast(0), edgePadding = 8.dp) {
@@ -300,31 +393,115 @@ private fun DeckContent(
                 }
             }
         }
+        item { ViewBar(viewMode, grouping, sorting, onViewMode, onGrouping, onSorting) }
         if (boardCards.isEmpty()) {
-            item { MessageBox("Vacío. Pulsa + para añadir cartas.", isError = false) }
+            item { MessageBox(t.emptyBoard, isError = false) }
         }
-        val groups = boardCards.groupBy { it.primaryType }
-            .toSortedMap(compareBy<String> { DeckCardEntity.TYPE_ORDER.indexOf(it).let { i -> if (i < 0) 99 else i } })
-        groups.forEach { (type, list) ->
-            item(key = "h-$currentBoard-$type") {
-                SectionHeader(DeckCardEntity.typeLabel(type), "${list.sumOf { it.quantity }}")
-            }
-            items(list.sortedWith(compareBy<DeckCardEntity>({ it.cmc }, { it.name })), key = { "${it.board}|${it.cardKey}" }) { card ->
-                CardRow(card, editing, onClick = { onCardClick(card) }, onQty = { onQty(card, it) })
+        groups.forEach { group ->
+            item(key = "h-$currentBoard-${group.key}") { SectionHeader(group.label, "${group.count}") }
+            if (columns > 1) {
+                val rows = group.cards.chunked(columns)
+                itemsIndexed(rows, key = { i, _ -> "r-$currentBoard-${group.key}-$i" }) { _, row ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        row.forEach { card ->
+                            CardTile(card, localized, Modifier.weight(1f)) { onCardClick(card) }
+                        }
+                        repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            } else {
+                items(group.cards, key = { "${it.board}|${it.cardKey}" }) { card ->
+                    when (viewMode) {
+                        DeckViewMode.TEXT -> TextRow(card, localized, editing, { onCardClick(card) }, { onQty(card, it) })
+                        DeckViewMode.FULL -> FullCardRow(card, localized, editing, { onCardClick(card) }, { onQty(card, it) })
+                        else -> CardRow(card, localized, editing, { onCardClick(card) }, { onQty(card, it) })
+                    }
+                }
             }
         }
         item { Spacer(Modifier.height(96.dp)) }
     }
 }
 
+/** Selector de vista (texto, lista, cuadrícula, carta completa) y de agrupación/orden. */
 @Composable
-private fun DeckHeader(deck: DeckEntity, cards: List<DeckCardEntity>, openUser: (String) -> Unit) {
+private fun ViewBar(
+    viewMode: DeckViewMode,
+    grouping: DeckGrouping,
+    sorting: DeckSorting,
+    onViewMode: (DeckViewMode) -> Unit,
+    onGrouping: (DeckGrouping) -> Unit,
+    onSorting: (DeckSorting) -> Unit,
+) {
+    val t = LocalStrings.current
+    var menu by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        DeckViewMode.entries.forEach { mode ->
+            IconToggleButton(checked = viewMode == mode, onCheckedChange = { onViewMode(mode) }) {
+                Icon(
+                    when (mode) {
+                        DeckViewMode.TEXT -> Icons.AutoMirrored.Outlined.Subject
+                        DeckViewMode.LIST -> Icons.AutoMirrored.Outlined.ViewList
+                        DeckViewMode.GRID -> Icons.Outlined.GridView
+                        DeckViewMode.FULL -> Icons.Outlined.Image
+                    },
+                    contentDescription = t.viewModeLabel(mode),
+                    tint = if (viewMode == mode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Text(
+            t.viewModeLabel(viewMode),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f).padding(start = 4.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Box {
+            TextButton(onClick = { menu = true }) {
+                Icon(Icons.Outlined.Tune, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(t.groupingLabel(grouping))
+            }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                Text(t.groupBy, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                DeckGrouping.entries.forEach { g ->
+                    DropdownMenuItem(
+                        text = { Text(t.groupingLabel(g)) },
+                        leadingIcon = { if (g == grouping) Icon(Icons.Outlined.Check, null) },
+                        onClick = { onGrouping(g); menu = false },
+                    )
+                }
+                HorizontalDivider()
+                Text(t.sortBy, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                DeckSorting.entries.forEach { s ->
+                    DropdownMenuItem(
+                        text = { Text(t.sortingLabel(s)) },
+                        leadingIcon = { if (s == sorting) Icon(Icons.Outlined.Check, null) },
+                        onClick = { onSorting(s); menu = false },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeckHeader(
+    deck: DeckEntity,
+    cards: List<DeckCardEntity>,
+    openUser: (String) -> Unit,
+    needsLogin: Boolean,
+    openLogin: () -> Unit,
+) {
+    val t = LocalStrings.current
     val price = cards.sumOf { (it.priceEur ?: 0.0) * it.quantity }
     Column {
         Box(Modifier.fillMaxWidth().height(160.dp)) {
-            deck.featuredScryfallId?.let {
+            deck.featuredImageUrl()?.let {
                 AsyncImage(
-                    model = ScryfallImages.url(it, ScryfallImages.Size.ART_CROP),
+                    model = it,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -352,36 +529,38 @@ private fun DeckHeader(deck: DeckEntity, cards: List<DeckCardEntity>, openUser: 
             }
         }
         Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Stat("Cartas", "${cards.filter { it.board == Boards.MAIN || it.board == Boards.COMMANDERS }.sumOf { it.quantity }}")
-            if (price > 0) Stat("Precio", String.format(Locale("es", "ES"), "%.2f €", price))
-            if (!deck.isLocalOnly) Stat("Me gusta", "${deck.likeCount}")
-            Stat("Visibilidad", when (deck.visibility) {
-                "private" -> "Privado"; "unlisted" -> "Oculto"; else -> if (deck.isLocalOnly) "Local" else "Público"
-            })
+            Stat(t.cards, "${cards.filter { it.board == Boards.MAIN || it.board == Boards.COMMANDERS }.sumOf { it.quantity }}")
+            if (price > 0) Stat(t.price, formatEur(price))
+            if (!deck.isLocalOnly) Stat(t.likes, "${deck.likeCount}")
+            Stat(t.visibility, if (deck.isLocalOnly) t.visibilityLocal else t.visibilityLabel(deck.visibility))
         }
-        StatusNotes(deck)
+        StatusNotes(deck, needsLogin, openLogin)
         HorizontalDivider(Modifier.padding(top = 8.dp))
     }
 }
 
 @Composable
-private fun StatusNotes(deck: DeckEntity) {
-    val notes = buildList {
-        if (deck.hasConflict) add("Moxfield tiene una versión más nueva y tú tienes cambios sin subir. Exporta tu versión si la quieres conservar y descarta los cambios locales para traer la de Moxfield.")
-        else if (deck.isLocalOnly) add("Este mazo solo está en el móvil. Se creará en Moxfield cuando la sincronización de escritura esté disponible; mientras, puedes exportarlo e importarlo en la web.")
-        else if (deck.hasLocalChanges) add("Hay cambios hechos en el móvil pendientes de subir a Moxfield.")
-    }
-    notes.forEach { note ->
-        Surface(
-            color = if (deck.hasConflict) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
-        ) {
-            Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.Warning, null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(note, style = MaterialTheme.typography.bodySmall)
-            }
+private fun StatusNotes(deck: DeckEntity, needsLogin: Boolean, openLogin: () -> Unit) {
+    val t = LocalStrings.current
+    val note = when {
+        deck.hasConflict -> t.noteConflict
+        needsLogin -> t.noteNeedsLogin
+        deck.isLocalOnly -> t.noteLocalOnly
+        deck.hasLocalChanges -> t.notePending
+        else -> null
+    } ?: return
+    Surface(
+        color = if (deck.hasConflict) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.tertiaryContainer,
+        shape = RoundedCornerShape(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clickable(enabled = needsLogin, onClick = openLogin),
+    ) {
+        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Warning, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(note, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -394,8 +573,31 @@ private fun Stat(label: String, value: String) {
     }
 }
 
+// ---------- Vistas de carta ----------
+
+/** Vista "Texto": como una lista impresa, sin imágenes. */
 @Composable
-private fun CardRow(card: DeckCardEntity, editing: Boolean, onClick: () -> Unit, onQty: (Int) -> Unit) {
+private fun TextRow(card: DeckCardEntity, localized: Localized, editing: Boolean, onClick: () -> Unit, onQty: (Int) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = if (editing) 0.dp else 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("${card.quantity}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(28.dp))
+        Text(
+            card.localName(localized) + if (card.isFoil) " ✦" else "",
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (editing) QtyButtons(card.quantity, onQty)
+        else Text(ManaText.plain(card.manaCost), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Vista "Lista": miniatura, nombre, coste y precio. */
+@Composable
+private fun CardRow(card: DeckCardEntity, localized: Localized, editing: Boolean, onClick: () -> Unit, onQty: (Int) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
@@ -408,7 +610,7 @@ private fun CardRow(card: DeckCardEntity, editing: Boolean, onClick: () -> Unit,
             Modifier.size(width = 36.dp, height = 50.dp).clip(RoundedCornerShape(3.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            card.scryfallId?.let {
+            card.imageId(localized)?.let {
                 AsyncImage(
                     model = ScryfallImages.url(it, ScryfallImages.Size.SMALL),
                     contentDescription = null,
@@ -419,7 +621,7 @@ private fun CardRow(card: DeckCardEntity, editing: Boolean, onClick: () -> Unit,
         }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(card.name + if (card.isFoil) " ✦" else "", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(card.localName(localized) + if (card.isFoil) " ✦" else "", maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 ManaText.plain(card.manaCost),
                 style = MaterialTheme.typography.labelSmall,
@@ -427,42 +629,133 @@ private fun CardRow(card: DeckCardEntity, editing: Boolean, onClick: () -> Unit,
             )
         }
         if (editing) {
-            IconButton(onClick = { onQty(card.quantity - 1) }) { Text("−", style = MaterialTheme.typography.titleLarge) }
-            IconButton(onClick = { onQty(card.quantity + 1) }) { Text("+", style = MaterialTheme.typography.titleLarge) }
+            QtyButtons(card.quantity, onQty)
         } else {
-            card.priceEur?.let {
-                Text(String.format(Locale("es", "ES"), "%.2f €", it), style = MaterialTheme.typography.labelSmall)
+            card.priceEur?.let { Text(formatEur(it), style = MaterialTheme.typography.labelSmall) }
+        }
+    }
+}
+
+/** Vista "Cuadrícula": la carta entera, con la cantidad encima. */
+@Composable
+private fun CardTile(card: DeckCardEntity, localized: Localized, modifier: Modifier, onClick: () -> Unit) {
+    Box(modifier.aspectRatio(0.716f).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surfaceVariant).clickable(onClick = onClick)) {
+        val id = card.imageId(localized)
+        if (id != null) {
+            AsyncImage(
+                model = ScryfallImages.url(id, ScryfallImages.Size.NORMAL),
+                contentDescription = card.localName(localized),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(card.localName(localized), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(6.dp))
+        }
+        if (card.quantity > 1) {
+            Surface(
+                color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.85f),
+                shape = RoundedCornerShape(bottomEnd = 8.dp),
+                modifier = Modifier.align(Alignment.TopStart),
+            ) {
+                Text(
+                    "×${card.quantity}",
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                )
             }
         }
+    }
+}
+
+/** Vista "Carta completa": imagen grande con su texto al lado. */
+@Composable
+private fun FullCardRow(card: DeckCardEntity, localized: Localized, editing: Boolean, onClick: () -> Unit, onQty: (Int) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier.weight(0.45f).aspectRatio(0.716f).clip(RoundedCornerShape(10.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            card.imageId(localized)?.let {
+                AsyncImage(
+                    model = ScryfallImages.url(it, ScryfallImages.Size.NORMAL),
+                    contentDescription = card.localName(localized),
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+        Column(Modifier.weight(0.55f)) {
+            Text(
+                "${card.quantity}× ${card.localName(localized)}" + if (card.isFoil) " ✦" else "",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                listOf(ManaText.plain(card.manaCost), card.typeLine).filter { it.isNotBlank() }.joinToString("  "),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            card.oracleText?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 8, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+            }
+            Text(
+                listOfNotNull(card.setCode.uppercase().ifBlank { null }, card.collectorNumber, card.priceEur?.let(::formatEur)).joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            if (editing) QtyButtons(card.quantity, onQty)
+        }
+    }
+}
+
+@Composable
+private fun QtyButtons(quantity: Int, onQty: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = { onQty(quantity - 1) }) { Text("−", style = MaterialTheme.typography.titleLarge) }
+        IconButton(onClick = { onQty(quantity + 1) }) { Text("+", style = MaterialTheme.typography.titleLarge) }
     }
 }
 
 @Composable
 private fun CardDetailDialog(
     card: DeckCardEntity,
+    localized: Localized,
     editing: Boolean,
+    canChangeArt: Boolean,
     onDismiss: () -> Unit,
     onQty: (Int) -> Unit,
     onMove: (String) -> Unit,
+    onChangeArt: () -> Unit,
 ) {
+    val t = LocalStrings.current
     var back by remember(card.cardKey) { mutableStateOf(false) }
+    val localName = card.localName(localized)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(card.name) },
+        title = {
+            Column {
+                Text(localName)
+                if (localName != card.name) Text(card.name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        },
         text = {
             LazyColumn {
                 item {
-                    card.scryfallId?.let { id ->
+                    card.imageId(localized)?.let { id ->
                         AsyncImage(
                             model = ScryfallImages.url(id, ScryfallImages.Size.NORMAL, back = back),
-                            contentDescription = card.name,
+                            contentDescription = localName,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .aspectRatio(0.716f)
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable(enabled = card.hasBackImage) { back = !back },
                         )
-                        if (card.hasBackImage) Text("Toca la carta para girarla", style = MaterialTheme.typography.labelSmall)
+                        if (card.hasBackImage) Text(t.tapToFlip, style = MaterialTheme.typography.labelSmall)
                     }
                 }
                 item {
@@ -474,21 +767,30 @@ private fun CardDetailDialog(
                                 card.setCode.uppercase().ifBlank { null },
                                 card.collectorNumber,
                                 card.rarity,
-                                card.priceEur?.let { String.format(Locale("es", "ES"), "%.2f €", it) },
+                                card.priceEur?.let(::formatEur),
                             ).joinToString(" · "),
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(top = 6.dp),
                         )
                     }
                 }
+                if (canChangeArt) {
+                    item {
+                        TextButton(onClick = onChangeArt, modifier = Modifier.padding(top = 4.dp)) {
+                            Icon(Icons.Outlined.Palette, null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(t.changeArt)
+                        }
+                    }
+                }
                 if (editing) {
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                            Text("Cantidad: ${card.quantity}", modifier = Modifier.weight(1f))
+                            Text(t.quantityN(card.quantity), modifier = Modifier.weight(1f))
                             TextButton(onClick = { onQty(card.quantity - 1) }) { Text("−1") }
                             TextButton(onClick = { onQty(card.quantity + 1) }) { Text("+1") }
                         }
-                        Text("Mover a:", style = MaterialTheme.typography.labelMedium)
+                        Text(t.moveTo, style = MaterialTheme.typography.labelMedium)
                         Row {
                             Boards.editable.filter { it != card.board }.forEach { b ->
                                 TextButton(onClick = { onMove(b) }) { Text(Boards.label(b)) }
@@ -500,15 +802,82 @@ private fun CardDetailDialog(
         },
         confirmButton = {
             Row {
-                if (editing) TextButton(onClick = { onQty(0); onDismiss() }) { Text("Quitar") }
-                TextButton(onClick = onDismiss) { Text("Cerrar") }
+                if (editing) TextButton(onClick = { onQty(0); onDismiss() }) { Text(t.remove) }
+                TextButton(onClick = onDismiss) { Text(t.close) }
             }
         },
     )
 }
 
+/** Elegir arte: todas las impresiones de la carta, como en Moxfield. */
+@Composable
+private fun PrintingsDialog(
+    state: PrintingsState,
+    currentScryfallId: String?,
+    onDismiss: () -> Unit,
+    onPick: (ScryCard) -> Unit,
+) {
+    val t = LocalStrings.current
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize().padding(12.dp), shape = RoundedCornerShape(16.dp)) {
+            Column {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(t.chooseArt, style = MaterialTheme.typography.titleMedium)
+                        Text(state.cardName, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    TextButton(onClick = onDismiss) { Text(t.close) }
+                }
+                when {
+                    state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    state.error != null -> MessageBox(state.error)
+                    state.printings.isEmpty() -> MessageBox(t.noResults, isError = false)
+                    else -> LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 110.dp),
+                        modifier = Modifier.fillMaxSize().padding(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(state.printings, key = { it.id }) { p ->
+                            val current = p.id == currentScryfallId
+                            Column(
+                                Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .then(if (current) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
+                                    .clickable(enabled = !current) { onPick(p) }
+                                    .padding(2.dp),
+                            ) {
+                                AsyncImage(
+                                    model = p.imageUrl(ScryfallImages.Size.NORMAL),
+                                    contentDescription = p.setName,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxWidth().aspectRatio(0.716f).clip(RoundedCornerShape(6.dp)),
+                                )
+                                Text(
+                                    "${p.set.uppercase()} · ${p.collectorNumber}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    listOfNotNull(p.setName.ifBlank { null }, p.prices.eur?.let { "$it €" }).joinToString(" · "),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun formatEur(value: Double): String = String.format(Locale("es", "ES"), "%.2f €", value)
+
 object ManaText {
-    /** "{2}{U}{B}" → "2UB"; "{W/U}" → "W/U". */
+    /** "{2}{U}{B}" → "2UB"; "{W/U}" → "(W/U)". */
     fun plain(cost: String): String = cost.replace("}{", " ").replace("{", "").replace("}", "")
         .split(" ").joinToString("") {
             when {

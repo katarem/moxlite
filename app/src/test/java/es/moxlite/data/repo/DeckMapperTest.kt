@@ -229,4 +229,24 @@ class DeckMapperTest {
         assertTrue(row.hasBackImage)
         assertEquals("A\nuno\n//\nB\ndos", row.oracleText)
     }
+
+    @Test
+    fun `la carta destacada del autor manda sobre el comandante y se guarda su id de Moxfield`() {
+        val dto = deck(
+            mapOf(
+                Boards.COMMANDERS to MoxBoardDto(cards = mapOf("k1" to entry(MoxCardDto(id = "c1", uniqueCardId = "u1", scryfallId = "sf-cmdr", name = "Atraxa")))),
+                Boards.MAIN to MoxBoardDto(cards = mapOf("k2" to entry(MoxCardDto(id = "m1", uniqueCardId = "u2", scryfallId = "sf-main", name = "Sol Ring")))),
+            )
+        ).copy(mainCardId = "m1")
+        val (entity, _) = DeckMapper.fromDto(dto, null)
+        assertEquals("sf-main", entity.featuredScryfallId)
+        assertEquals("m1", entity.featuredMoxCardId)
+    }
+
+    @Test
+    fun `fromSummary guarda mainCardId para la miniatura de las listas`() {
+        val entity = DeckMapper.fromSummary(MoxDeckSummaryDto(publicId = "S1", name = "Burn", mainCardId = "abc12"))
+        assertEquals("abc12", entity.featuredMoxCardId)
+        assertNull(entity.featuredScryfallId)
+    }
 }

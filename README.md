@@ -4,45 +4,64 @@ Cliente Android personal para Moxfield: consultar y gestionar mazos **con y sin 
 
 > Cliente no oficial. Usa la API interna de Moxfield (`api2.moxfield.com`), que no está documentada y puede cambiar. Detalles en [`docs/moxfield-api.md`](docs/moxfield-api.md).
 
-## Qué hace (v0.1)
+## Qué hace
 
 | Función | Estado |
 |---|---|
-| Ver cualquier mazo público (por enlace, búsqueda o usuario) | ✅ |
-| Buscar mazos (texto, formato, orden) con paginación | ✅ |
+| Iniciar sesión **una vez** (WebView) y quedarse con la sesión: se renueva sola | ✅ |
+| Cuenta: ver estado de la sesión, cambios pendientes y cerrar sesión | ✅ |
+| "Mis mazos": todos los tuyos (también privados y ocultos) + los guardados en el móvil | ✅ |
+| **Subir cambios a Moxfield**: crear, importar, añadir, cantidades, mover, quitar, renombrar, cambiar arte | ✅ (rutas de la web, sin probar en vivo, ver abajo) |
+| Ver cualquier mazo público (por enlace, búsqueda o usuario), con miniatura en las listas | ✅ |
+| Vistas del mazo: texto, lista, cuadrícula y carta completa; agrupar por tipo/coste/color y ordenar | ✅ |
+| Añadir cartas con buscador con imágenes y en cualquier idioma ("rayo" o "lightning bolt") | ✅ |
+| Elegir arte / edición de cada carta | ✅ |
+| Compartir un mazo con un enlace que otra persona con Moxlite abre en su app | ✅ |
+| Guardar mazos sin conexión (cartas + imágenes) y guardar los tuyos automáticamente | ✅ |
+| Bloqueo de LaLiga a Cloudflare: aviso claro, cola que se sube sola después y proxy opcional | ✅ |
+| Idioma de la app (español / inglés) e idioma de las cartas (imágenes y nombres) | ✅ |
+| Copiar mazos ajenos, crear mazos, importar/exportar listas de texto | ✅ |
 | Buscar usuarios, seguirlos y ver sus mazos públicos | ✅ |
-| "Mis mazos": tus mazos públicos + los guardados en el móvil | ✅ |
-| Guardar mazo sin conexión (cartas + imágenes en disco) | ✅ |
-| Actualización automática de mazos guardados cada 12 h | ✅ |
-| Editar en local: cantidades, mover entre boards, añadir cartas (Scryfall), renombrar | ✅ |
-| Copiar cualquier mazo / crear mazo nuevo / importar lista de texto | ✅ (en local) |
-| Exportar como texto (compartir) | ✅ |
-| Iniciar sesión (WebView) y usar mazos privados | ✅ lectura |
-| Abrir enlaces `moxfield.com/decks/...` y textos compartidos en la app | ✅ |
-| **Subir cambios a Moxfield** | ⏳ falta capturar endpoints (cola preparada) |
 
 ## Cómo funciona
 
 ```
 UI (Compose) → ViewModels → DeckRepository ──► Room (fuente de verdad, offline)
                                   │
-                ┌─────────────────┼─────────────────┐
+                ┌─────────────────┼──────────────────┐
          MoxfieldService     CardRepository     Cola de cambios (pending_ops)
-         (OkHttp + cookies     (Scryfall)        └─ SyncWorker / MoxfieldWriter
-          del WebView)
+         (OkHttp + cookies     (Scryfall)        └─ SyncWorker → MoxfieldApiWriter
+          del WebView + token)
 ```
 
-- **Offline-first**: la UI solo lee de Room. Las ediciones se aplican en local al momento y se guardan como operaciones (`DeckOp`) en una cola.
-- **Sin pisar cambios**: al actualizar un mazo con cambios locales no se sobrescribe; si Moxfield cambió entretanto, se marca conflicto.
-- **Sesión**: el login de Moxfield exige captcha, así que se inicia sesión en un WebView y se captura el token Bearer que manda la propia web. OkHttp comparte cookies con el WebView (incluida `cf_clearance` de Cloudflare) y usa su mismo User-Agent.
-- **Imágenes**: URL directa a `cards.scryfall.io` a partir del `scryfall_id` que da Moxfield, caché de 1,5 GB en `filesDir` (Android no la borra).
+- **Offline-first**: la UI solo lee de Room. Las ediciones se aplican en local al momento y se guardan como operaciones (`DeckOp`) en una cola que se sube sola.
+- **Sesión**: el login de Moxfield exige captcha, así que se hace una vez en un WebView. Al entrar, la app pide un token a `POST /v1/startup/authenticated` con la cookie de sesión (lo mismo que hace la web al abrirse), lo guarda y vuelve sola. Cuando el token caduca o Moxfield responde 401, se renueva igual, sin volver a abrir el navegador. Solo si Moxfield cierra la sesión se pide entrar de nuevo.
+- **Escritura**: `MoxfieldApiWriter` lee el mazo remoto antes de cada operación (versión `X-Deck-Version` e id de cada carta) y usa las mismas rutas que la web. Las operaciones son idempotentes (cantidades absolutas, mover lo que ya no está no hace nada), así que reintentar no duplica. Un mazo creado en el móvil se crea en Moxfield y se rellena con una importación de texto con las ediciones exactas.
+- **Mazos ajenos**: no se editan; como en Moxfield, se copian.
+- **Imágenes**: `cards.scryfall.io` a partir del `scryfall_id` (caché de 1,5 GB en `filesDir`, Android no la borra). Las miniaturas de las búsquedas usan `assets.moxfield.net` con el `mainCardId`. Con otro idioma de cartas, la misma impresión en ese idioma se busca en Scryfall por lotes y queda en caché.
+- **Idiomas**: los textos están en Kotlin (`i18n/Es.kt`, `i18n/En.kt`), así que cambiar de idioma es instantáneo y una traducción que falte no compila.
 
-## Siguiente paso: escritura en Moxfield
+### Fútbol y el bloqueo de LaLiga
 
-1. Instala la app, inicia sesión y ve a **Ajustes → Moxfield web**.
-2. Haz una vez cada acción: crear mazo, añadir carta, cambiar cantidad, mover a banquillo, quitar carta, renombrar, copiar un mazo y borrarlo.
-3. **Ajustes → Registro de API → Compartir**. El registro no incluye tokens ni contraseñas.
-4. Con eso se implementa `MoxfieldWriter` (ver `data/sync/DeckOp.kt`) y se cambia `PendingDiscoveryWriter` en `AppContainer`. La cola que ya tengas pendiente se subirá sola.
+Durante los partidos, las operadoras españolas bloquean IPs de Cloudflare por orden judicial, y Moxfield (web y API) está detrás de Cloudflare. **Ninguna app puede llegar a una IP bloqueada sin salir por otro sitio**, así que Moxlite hace lo posible para que no te enteres:
+
+1. **Todo lo que abres queda en el móvil** y "Guardar mis mazos sin conexión" (activado por defecto) descarga tus mazos con imágenes en segundo plano.
+2. **Los cambios no se pierden**: se aplican en local y se suben solos cuando Moxfield vuelve (WorkManager reintenta con espera creciente).
+3. **El error dice lo que pasa** ("posible bloqueo de LaLiga") en vez de un fallo genérico.
+4. **Enlaces compartidos que llevan el mazo dentro**: quien lo recibe lo ve aunque Moxfield no cargue.
+5. **Proxy opcional** (HTTP o SOCKS, Ajustes → Proxy): si tienes un servidor fuera de España (un VPS, el router de otra casa…), todo el tráfico de la app (y el WebView) sale por ahí. Un proxy dentro de España no sirve.
+
+### Compartir mazos
+
+"Compartir enlace" genera `https://moxfield.com/decks/<id>#moxlite=<mazo comprimido>`. Es un enlace normal (se puede tocar en WhatsApp), lleva el mazo dentro en el fragmento `#` (no llega a ningún servidor) y:
+
+- con Moxlite se abre en la app (hay que activar una vez **Ajustes → Abrir enlaces de Moxfield con Moxlite**, porque Android no deja verificar un dominio que no es nuestro);
+- sin Moxlite abre el mazo en la web de Moxfield;
+- si el mazo solo existe en el móvil de quien lo manda, Moxlite ofrece importarlo.
+
+### Escritura: qué está verificado
+
+Las rutas de escritura son las que usa la web de Moxfield (sacadas de su código por proyectos de la comunidad, ver [`docs/moxfield-api.md`](docs/moxfield-api.md)); PUT/DELETE de cantidades están confirmados por una extensión en uso. No se han podido probar contra una cuenta real desde aquí. Si una operación falla, queda en **Cuenta → Cambios pendientes** con el error, se puede descartar, y el **Registro de API** (Ajustes) enseña qué llamadas hace la web para corregir la ruta.
 
 ## Descargar
 
@@ -83,9 +102,14 @@ Tests unitarios JVM en `app/src/test` (JUnit 4 + `kotlinx-coroutines-test`), sin
 |---|---|
 | `DeckTextTest`, `domain/DeckTextFormatTest` | Importar/exportar listas de texto (cabeceras, ediciones, foil, MTGO, ida y vuelta) |
 | `MoxfieldDtoTest`, `data/remote/*` | Parseo tolerante de la API de Moxfield y Scryfall, parámetros de búsqueda, URLs de imagen, detección de Cloudflare, mensajes de error |
-| `data/repo/DeckMapperTest` | DTO → Room: cartas, carta destacada, colores, estado local conservado |
-| `data/repo/CardRepositoryTest` | Resolución de listas contra Scryfall (lotes de 75, impresión vs. nombre, cartas partidas) con un servicio falso |
-| `data/sync/DeckOpTest` | Serialización de la cola de cambios y textos |
+| `data/repo/DeckMapperTest` | DTO → Room: cartas, carta destacada (también `mainCardId`), colores, estado local conservado |
+| `data/repo/CardRepositoryTest` | Resolución de listas contra Scryfall, búsqueda multilingüe, impresiones, traducciones por lotes, con un servicio falso |
+| `data/sync/DeckOpTest` | Serialización de la cola de cambios (también colas antiguas) y textos |
+| `data/sync/WriteParsingTest` | Respuestas de búsqueda de cartas de Moxfield, nombres, errores de escritura |
+| `data/session/AuthResultTest` | Respuesta de renovación de sesión (token, usuario, caducidad) |
+| `domain/ShareLinkTest` | Enlaces para compartir: ida y vuelta, mazos locales, datos corruptos |
+| `ui/deck/DeckLayoutTest` | Agrupar y ordenar cartas para las vistas, nombres e imágenes traducidos |
+| `i18n/I18nTest` | Idioma de la app y textos en español/inglés |
 | `data/session/ApiTrafficLogTest` | Registro de API: filtrado, redacción de secretos, duplicados, límite |
 | `data/local/EntitiesTest` | Tipo principal de carta y estado de carga |
 | `data/update/UpdateCheckerTest` | Comparación de versiones, elección del APK y notas de la Release |
@@ -100,15 +124,17 @@ app/src/main/java/es/moxlite/
 │   ├── remote/moxfield/     # API de Moxfield (DTOs tolerantes)
 │   ├── remote/scryfall/     # API de Scryfall + URLs de imagen
 │   ├── repo/                # DeckRepository, CardRepository, mapeos
-│   ├── session/             # Sesión, cookies compartidas, puente WebView, registro de API
-│   └── sync/                # DeckOp, MoxfieldWriter, SyncWorker
-├── domain/DeckText.kt       # Importar/exportar texto
+│   ├── session/             # Sesión, renovación del token, cookies compartidas, puente WebView
+│   ├── settings/            # Ajustes (idiomas, vista, proxy…)
+│   └── sync/                # DeckOp, MoxfieldApiWriter, SyncWorker
+├── domain/                  # Importar/exportar texto, enlaces para compartir
+├── i18n/                    # Textos en español e inglés
 └── ui/                      # Pantallas Compose
 ```
 
 ## Ideas pendientes
 
-- Plan B contra Cloudflare: si OkHttp queda bloqueado, hacer las peticiones con `fetch` dentro de un WebView oculto.
+- Plan B contra Cloudflare: si OkHttp queda bloqueado por el reto (no por la IP), hacer las peticiones con `fetch` dentro de un WebView oculto.
 - Bulk data de Scryfall para buscar cartas sin conexión.
 - Estadísticas (curva de maná, colores) y validación de legalidad por formato.
 - Pedir a Moxfield un User-Agent en lista blanca.
