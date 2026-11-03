@@ -20,11 +20,11 @@ data class ScryImageUris(
 @Serializable
 data class ScryFace(
     val name: String = "",
-    @SerialName("printed_name") val printedName: String? = null,
     @SerialName("mana_cost") val manaCost: String? = null,
     @SerialName("type_line") val typeLine: String? = null,
     @SerialName("oracle_text") val oracleText: String? = null,
     @SerialName("image_uris") val imageUris: ScryImageUris? = null,
+    @SerialName("printed_name") val printedName: String? = null,
 )
 
 @Serializable
