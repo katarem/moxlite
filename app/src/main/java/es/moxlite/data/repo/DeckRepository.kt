@@ -27,6 +27,7 @@ import es.moxlite.data.settings.AppSettings
 import es.moxlite.data.sync.DeckOp
 import es.moxlite.data.sync.MoxfieldWriter
 import es.moxlite.data.sync.SyncWorker
+import es.moxlite.data.sync.WriteParsing
 import es.moxlite.data.sync.WriteResult
 import es.moxlite.domain.DeckLine
 import es.moxlite.domain.DeckSnapshot
@@ -40,8 +41,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -77,10 +76,20 @@ class DeckRepository(
 
     // ---------- Lectura ----------
 
-    fun observeMine(): Flow<List<DeckEntity>> =
-        session.state.map { it.userName }.distinctUntilChanged().flatMapLatest { decks.observeMine(it) }
+    fun observeAll(): Flow<List<DeckEntity>> = decks.observeAll()
 
-    fun observeRecent(): Flow<List<DeckEntity>> = decks.observeRecent()
+    /** Id nuevo de un mazo creado en el móvil cuando ya se ha subido a Moxfield (null mientras no). */
+    fun observeAlias(id: String): Flow<String?> = decks.observeAlias(id)
+
+    /** Sigue los cambios de id (mazo local subido a Moxfield) hasta el id actual. */
+    suspend fun resolveId(id: String): String {
+        var current = id
+        repeat(4) { current = decks.getAlias(current) ?: return current }
+        return current
+    }
+
+    /** Apunta que se ha abierto el mazo (pestaña "Recientes"). */
+    suspend fun markViewed(id: String) = decks.markViewed(id, System.currentTimeMillis())
     fun observeDeck(id: String): Flow<DeckEntity?> = decks.observe(id)
     fun observeCards(id: String): Flow<List<DeckCardEntity>> = decks.observeCards(id)
     fun observePendingOps(): Flow<List<PendingOpEntity>> = ops.observeAll()
@@ -129,6 +138,39 @@ class DeckRepository(
         moxfield.searchDecks(query.toParams())
     }
 
+    private val cardIdCache = mutableMapOf<String, String>()
+
+    /**
+     * Id de impresión de Moxfield de una carta por su nombre en inglés (lo que pide el filtro de
+     * comandante de la búsqueda). Null si Moxfield no la encuentra.
+     */
+    suspend fun moxfieldCardId(name: String): String? = withContext(Dispatchers.IO) {
+        val key = name.trim().lowercase()
+        cardIdCache[key]?.let { return@withContext it }
+        val attempts = listOf<suspend () -> kotlinx.serialization.json.JsonElement>(
+            { moxfield.cardLookup(name.trim(), null, null) },
+            { moxfield.cardSearch("!\"${name.trim().replace("\"", "")}\"") },
+        )
+        for (attempt in attempts) {
+            val id = try {
+                WriteParsing.extractCardId(attempt())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: MoxError.NotFound) {
+                null
+            } catch (e: IOException) {
+                throw e // sin red, bloqueo, Cloudflare…: que se vea el motivo real
+            } catch (_: Exception) {
+                null
+            }
+            if (id != null) {
+                synchronized(cardIdCache) { cardIdCache[key] = id }
+                return@withContext id
+            }
+        }
+        null
+    }
+
     /**
      * Mazos de la cuenta. Con sesión se usan los personales (incluidos privados y ocultos); si
      * falla, o sin sesión, los públicos del usuario. Se guardan los resúmenes para que salgan en
@@ -158,11 +200,16 @@ class DeckRepository(
             val row = DeckMapper.fromSummary(summary).let { r ->
                 if (r.authorUserName.isBlank()) r.copy(authorUserName = me) else r
             }
-            when {
-                existing == null || !existing.isFullyLoaded ->
-                    decks.upsert(row.copy(isSaved = existing?.isSaved ?: false))
-                existing.featuredMoxCardId == null && summary.mainCardId != null ->
-                    decks.upsert(existing.copy(featuredMoxCardId = summary.mainCardId))
+            if (existing == null || !existing.isFullyLoaded) {
+                decks.upsert(row.copy(isSaved = existing?.isSaved ?: false, viewedAt = existing?.viewedAt ?: 0))
+            } else {
+                // Ya descargado: solo se completan los datos que trae el resumen.
+                val updated = existing.copy(
+                    featuredMoxCardId = existing.featuredMoxCardId ?: summary.mainCardId,
+                    bracket = summary.effectiveBracket ?: existing.bracket,
+                    hubs = row.hubs.ifBlank { existing.hubs },
+                )
+                if (updated != existing) decks.upsert(updated)
             }
         }
 
@@ -296,6 +343,7 @@ class DeckRepository(
         val qty = quantity.coerceAtLeast(0)
         if (qty == 0) decks.deleteCard(deckId, board, cardKey)
         else decks.upsertCards(listOf(card.copy(quantity = qty)))
+        if (board == Boards.COMMANDERS) updateCommanders(deckId)
         enqueue(
             deckId,
             DeckOp.SetQuantity(
@@ -313,6 +361,7 @@ class DeckRepository(
         val target = decks.getCard(deckId, toBoard, cardKey)
         decks.deleteCard(deckId, fromBoard, cardKey)
         decks.upsertCards(listOf(card.copy(board = toBoard, quantity = card.quantity + (target?.quantity ?: 0))))
+        if (Boards.COMMANDERS == fromBoard || Boards.COMMANDERS == toBoard) updateCommanders(deckId)
         enqueue(deckId, DeckOp.MoveCard(fromBoard, toBoard, cardKey, card.name, card.quantity))
     }
 
@@ -339,6 +388,7 @@ class DeckRepository(
         decks.get(deckId)?.let { deck ->
             if (deck.featuredScryfallId == null) decks.upsert(deck.copy(featuredScryfallId = row.scryfallId))
         }
+        if (board == Boards.COMMANDERS) updateCommanders(deckId)
         enqueue(
             deckId,
             DeckOp.SetQuantity(
@@ -413,6 +463,10 @@ class DeckRepository(
                 featuredMoxCardId = source.featuredMoxCardId,
                 mainboardCount = source.mainboardCount,
                 originalPublicId = source.publicId.takeUnless { source.isLocalOnly },
+                commanders = source.commanders,
+                bracket = source.bracket,
+                hubs = source.hubs,
+                viewedAt = System.currentTimeMillis(),
             ),
             decks.getCards(sourceId).map { it.copy(deckId = id) },
         )
@@ -432,6 +486,8 @@ class DeckRepository(
                 featuredScryfallId = featured?.scryfallId,
                 colorIdentity = DeckMapper.colors(rows.flatMap { r -> r.colorIdentity.map { it.toString() } }),
                 mainboardCount = rows.filter { it.board == Boards.MAIN }.sumOf { it.quantity },
+                commanders = DeckMapper.commanderNames(rows),
+                viewedAt = System.currentTimeMillis(),
             ),
             rows,
         )
@@ -485,6 +541,10 @@ class DeckRepository(
                 mainboardCount = rows.filter { it.board == Boards.MAIN }.sumOf { it.quantity },
                 isSaved = current?.isSaved ?: false,
                 fetchedAt = System.currentTimeMillis(),
+                commanders = DeckMapper.commanderNames(rows),
+                bracket = current?.bracket,
+                hubs = current?.hubs.orEmpty(),
+                viewedAt = System.currentTimeMillis(),
             ),
             rows,
         )
@@ -613,6 +673,9 @@ class DeckRepository(
         decks.get(deckId)?.let { if (!it.hasLocalChanges) decks.upsert(it.copy(hasLocalChanges = true)) }
         if (writer.isAvailable) SyncWorker.pushSoon(context)
     }
+
+    private suspend fun updateCommanders(deckId: String) =
+        decks.setCommanders(deckId, DeckMapper.commanderNames(decks.getCards(deckId)))
 
     private fun newLocalId() = "local-" + UUID.randomUUID().toString().take(13)
 

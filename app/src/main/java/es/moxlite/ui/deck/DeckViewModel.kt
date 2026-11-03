@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
@@ -56,9 +57,17 @@ data class CardSearchState(
 class DeckViewModel(private val c: AppContainer, val publicId: String) : ViewModel() {
     private val repo = c.deckRepository
 
-    val deck: StateFlow<DeckEntity?> = repo.observeDeck(publicId)
+    /**
+     * Id actual del mazo. Un mazo creado en el móvil tiene un id "local-…" que cambia por el de
+     * Moxfield al subirse; si estaba abierto, la pantalla sigue al id nuevo en vez de quedarse
+     * en blanco (la fila vieja desaparece de Room).
+     */
+    private val deckId = MutableStateFlow(publicId)
+    private val id: String get() = deckId.value
+
+    val deck: StateFlow<DeckEntity?> = deckId.flatMapLatest { repo.observeDeck(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-    val cards: StateFlow<List<DeckCardEntity>> = repo.observeCards(publicId)
+    val cards: StateFlow<List<DeckCardEntity>> = deckId.flatMapLatest { repo.observeCards(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** Cartas en el idioma elegido en Ajustes (imágenes y nombres). */
@@ -88,17 +97,23 @@ class DeckViewModel(private val c: AppContainer, val publicId: String) : ViewMod
 
     init {
         viewModelScope.launch {
-            val local = repo.observeDeck(publicId).first()
+            deckId.value = repo.resolveId(id)
+            val local = repo.observeDeck(id).first()
+            if (local != null) repo.markViewed(id)
             // Al abrir: si hay red, se actualiza (sin pisar cambios locales).
             if (local?.isLocalOnly != true && c.connectivity.online.value) refresh()
-            else if (local == null) _error.value = java.net.UnknownHostException()
+            else if (local == null || !local.isFullyLoaded) _error.value = java.net.UnknownHostException()
+        }
+        // Seguir al mazo si cambia de id mientras está abierto.
+        viewModelScope.launch {
+            deckId.flatMapLatest { repo.observeAlias(it) }.filterNotNull().collect { deckId.value = it }
         }
         // Traducir las cartas al idioma elegido (una vez por carta: queda en caché).
         viewModelScope.launch {
             combine(c.settings.cardLanguage, cards.map { it.size }.distinctUntilChanged()) { lang, size -> lang to size }
                 .collectLatest { (lang, size) ->
                     if (lang != "en" && size > 0 && c.connectivity.online.value) {
-                        runCatching { repo.ensureLocalized(publicId) }
+                        runCatching { repo.ensureLocalized(id) }
                     }
                 }
         }
@@ -107,8 +122,11 @@ class DeckViewModel(private val c: AppContainer, val publicId: String) : ViewMod
     fun refresh(force: Boolean = false) {
         viewModelScope.launch {
             _loading.value = true
-            runCatching { repo.refreshDeck(publicId, force) }
-                .onSuccess { _error.value = null }
+            runCatching { repo.refreshDeck(id, force) }
+                .onSuccess {
+                    _error.value = null
+                    repo.markViewed(id)
+                }
                 .onFailure { e ->
                     _error.value = e
                     if (deck.value != null) emit(DeckEvent.Message(e.userMessage()))
@@ -123,47 +141,47 @@ class DeckViewModel(private val c: AppContainer, val publicId: String) : ViewMod
         val saving = !d.isSaved
         val t = I18n.strings
         if (saving) emit(DeckEvent.Message(t.savingOffline))
-        repo.setSaved(publicId, saving)
+        repo.setSaved(id, saving)
         emit(DeckEvent.Message(if (saving) t.availableOffline else t.noLongerOffline))
     }
 
     fun setQuantity(card: DeckCardEntity, qty: Int) = launchSafe {
-        repo.setQuantity(publicId, card.board, card.cardKey, qty)
+        repo.setQuantity(id, card.board, card.cardKey, qty)
         warnIfNoSession()
     }
 
     fun move(card: DeckCardEntity, toBoard: String) = launchSafe {
-        repo.moveCard(publicId, card.board, toBoard, card.cardKey)
+        repo.moveCard(id, card.board, toBoard, card.cardKey)
         warnIfNoSession()
     }
 
-    fun rename(name: String) = launchSafe { repo.rename(publicId, name); warnIfNoSession() }
+    fun rename(name: String) = launchSafe { repo.rename(id, name); warnIfNoSession() }
 
     fun copy(name: String) = launchSafe {
-        val id = repo.copyDeck(publicId, name)
+        val id = repo.copyDeck(id, name)
         warnIfNoSession()
         emit(DeckEvent.OpenDeck(id))
     }
 
     fun export(includePrintings: Boolean) = launchSafe {
-        emit(DeckEvent.Share(repo.exportText(publicId, includePrintings), deck.value?.name ?: I18n.strings.deck))
+        emit(DeckEvent.Share(repo.exportText(id, includePrintings), deck.value?.name ?: I18n.strings.deck))
     }
 
     /** Enlace para que otra persona con Moxlite vea el mazo en su app (aunque Moxfield no cargue). */
     fun shareLink() = launchSafe {
-        val snapshot = repo.snapshot(publicId)
+        val snapshot = repo.snapshot(id)
         val link = ShareLink.build(snapshot)
         emit(DeckEvent.Share(I18n.strings.shareMessage(snapshot.n, link), snapshot.n))
     }
 
     fun discardLocalChanges() = launchSafe {
         val wasLocal = deck.value?.isLocalOnly == true
-        repo.discardLocalChanges(publicId)
+        repo.discardLocalChanges(id)
         if (wasLocal) emit(DeckEvent.Closed) else emit(DeckEvent.Message(I18n.strings.restoredFromMoxfield))
     }
 
     fun removeFromDevice() = launchSafe {
-        repo.removeFromDevice(publicId)
+        repo.removeFromDevice(id)
         emit(DeckEvent.Closed)
     }
 
@@ -195,7 +213,7 @@ class DeckViewModel(private val c: AppContainer, val publicId: String) : ViewMod
         // En el mazo se guarda la impresión inglesa (la que entiende Moxfield); la traducción se
         // recuerda para verla en el idioma buscado.
         val english = c.cardRepository.englishPrinting(result)
-        repo.addCard(publicId, board, english, quantity, localized = result.takeIf { it.lang != "en" })
+        repo.addCard(id, board, english, quantity, localized = result.takeIf { it.lang != "en" })
         warnIfNoSession()
         emit(DeckEvent.Message(I18n.strings.added(result.displayName)))
     }
@@ -216,7 +234,7 @@ class DeckViewModel(private val c: AppContainer, val publicId: String) : ViewMod
     }
 
     fun changePrinting(card: DeckCardEntity, printing: ScryCard) = launchSafe {
-        repo.changePrinting(publicId, card.board, card.cardKey, printing)
+        repo.changePrinting(id, card.board, card.cardKey, printing)
         _printings.value = null
         warnIfNoSession()
         emit(DeckEvent.Message(I18n.strings.printingChanged(printing.setName.ifBlank { printing.set.uppercase() })))

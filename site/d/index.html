@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Mazo compartido · Moxlite</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --fg: #1d1b20; --muted: #625b71; --card: #ffffff; --line: #e3e0e8;
+    --accent: #6750a4; --on-accent: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141218; --fg: #e6e0e9; --muted: #cac4d0; --card: #1d1b20; --line: #36343b;
+      --accent: #d0bcff; --on-accent: #381e72; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); margin: 0 0 20px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  a.btn, button.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
+    padding: 0 18px; border-radius: 22px; border: 1px solid var(--line); background: var(--card);
+    color: var(--fg); text-decoration: none; font: inherit; cursor: pointer; }
+  a.btn.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; }
+  h2 { font-size: 1rem; margin: 0 0 6px; display: flex; justify-content: space-between; }
+  h2 span { color: var(--muted); font-weight: normal; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { padding: 3px 0; border-top: 1px solid var(--line); display: flex; gap: 8px; }
+  li:first-child { border-top: 0; }
+  .q { color: var(--muted); min-width: 2ch; text-align: right; }
+  .set { color: var(--muted); font-size: .85em; margin-left: auto; white-space: nowrap; }
+  .note { color: var(--muted); font-size: .9rem; }
+  .error { color: #b3261e; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Moxlite</h1>
+  <p class="meta" id="meta"></p>
+  <div class="actions" id="actions" hidden>
+    <a class="btn primary" id="open">Abrir en Moxlite</a>
+    <a class="btn" id="download">Descargar Moxlite</a>
+    <button class="btn" id="copy" type="button">Copiar lista</button>
+    <a class="btn" id="moxfield" hidden>Ver en Moxfield</a>
+  </div>
+  <div id="list"></div>
+  <p class="note" id="note"></p>
+</main>
+<script>
+(function () {
+  "use strict";
+  var en = !/^es\b/i.test(navigator.language || "es");
+  var T = en ? {
+    open: "Open in Moxlite", download: "Download Moxlite", copy: "Copy list", copied: "Copied",
+    moxfield: "View on Moxfield", cards: "cards", by: "by",
+    note: "If Moxlite is installed and this page opened instead, tap “Open in Moxlite”. To skip this page next time: Android Settings → Apps → Moxlite → Open by default → add the links.",
+    bad: "This link doesn't contain a deck (it may be cut off).", old: "Your browser can't read this link. Open it with Moxlite.",
+    boards: { Commander: "Commander", Companion: "Companion", Deck: "Deck", Sideboard: "Sideboard", Maybeboard: "Maybeboard" }
+  } : {
+    open: "Abrir en Moxlite", download: "Descargar Moxlite", copy: "Copiar lista", copied: "Copiada",
+    moxfield: "Ver en Moxfield", cards: "cartas", by: "de",
+    note: "Si tienes Moxlite y se ha abierto esta página, toca «Abrir en Moxlite». Para saltártela la próxima vez: Ajustes de Android → Aplicaciones → Moxlite → Abrir de forma predeterminada → añadir los enlaces.",
+    bad: "Este enlace no lleva ningún mazo (puede que esté cortado).", old: "Tu navegador no puede leer este enlace. Ábrelo con Moxlite.",
+    boards: { Commander: "Comandante", Companion: "Compañero", Deck: "Mazo", Sideboard: "Banquillo", Maybeboard: "Quizás" }
+  };
+  if (en) document.documentElement.lang = "en";
+
+  // Repositorio a partir de la URL (https://<usuario>.github.io/<repo>/d/), para que sirva en forks.
+  var owner = location.hostname.split(".")[0];
+  var repo = location.pathname.split("/").filter(Boolean)[0] || "moxlite";
+  var releases = "https://github.com/" + owner + "/" + repo + "/releases/latest";
+  var apk = releases + "/download/moxlite.apk";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var match = /(?:^|[#&?])moxlite=([A-Za-z0-9_-]+)/.exec(location.hash || location.search);
+
+  function fail(text) {
+    $("title").textContent = "Moxlite";
+    $("meta").innerHTML = "";
+    var p = document.createElement("p");
+    p.className = "error";
+    p.textContent = text;
+    $("list").appendChild(p);
+    var a = document.createElement("a");
+    a.className = "btn"; a.href = releases; a.textContent = T.download;
+    $("list").appendChild(a);
+    if (match) {
+      var o = document.createElement("a");
+      o.className = "btn primary"; o.textContent = T.open; o.style.marginLeft = "8px";
+      o.href = "moxlite://d?moxlite=" + match[1];
+      $("list").appendChild(o);
+    }
+  }
+
+  function base64UrlToBytes(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  function inflate(bytes) {
+    var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Response(stream).text();
+  }
+
+  var HEADERS = ["Commander", "Companion", "Deck", "Sideboard", "Maybeboard"];
+  var LINE = /^(\d+)\s+(.+?)(?:\s+\(([A-Za-z0-9]{2,8})\)(?:\s+(\S+))?)?(?:\s+\*[FE]\*)?\s*$/;
+
+  function parseList(text) {
+    var boards = [], current = null;
+    text.split(/\r?\n/).forEach(function (raw) {
+      var line = raw.trim();
+      if (!line) return;
+      var m = LINE.exec(line);
+      if (!m) { current = { name: line, cards: [] }; boards.push(current); return; }
+      if (!current) { current = { name: "Deck", cards: [] }; boards.push(current); }
+      current.cards.push({ q: +m[1], name: m[2], set: m[3] ? m[3] + (m[4] ? " " + m[4] : "") : "" });
+    });
+    return boards;
+  }
+
+  function render(deck) {
+    document.title = deck.n + " · Moxlite";
+    $("title").textContent = deck.n;
+    var boards = parseList(deck.t || "");
+    var main = boards.filter(function (b) { return b.name === "Deck"; })[0];
+    var count = main ? main.cards.reduce(function (n, c) { return n + c.q; }, 0) : 0;
+    $("meta").textContent = [deck.f, deck.a ? T.by + " @" + deck.a : "", count ? count + " " + T.cards : ""]
+      .filter(Boolean).join(" · ");
+
+    boards.forEach(function (b) {
+      var section = document.createElement("section");
+      var h = document.createElement("h2");
+      h.textContent = HEADERS.indexOf(b.name) >= 0 ? T.boards[b.name] : b.name;
+      var n = document.createElement("span");
+      n.textContent = b.cards.reduce(function (s, c) { return s + c.q; }, 0);
+      h.appendChild(n);
+      section.appendChild(h);
+      var ul = document.createElement("ul");
+      b.cards.forEach(function (c) {
+        var li = document.createElement("li");
+        var q = document.createElement("span"); q.className = "q"; q.textContent = c.q;
+        var name = document.createElement("span"); name.textContent = c.name;
+        li.appendChild(q); li.appendChild(name);
+        if (c.set) { var s = document.createElement("span"); s.className = "set"; s.textContent = c.set; li.appendChild(s); }
+        ul.appendChild(li);
+      });
+      section.appendChild(ul);
+      $("list").appendChild(section);
+    });
+
+    // Android: intent:// abre la app y, si no está instalada, la página de descarga.
+    var payload = match[1];
+    var isAndroid = /Android/i.test(navigator.userAgent);
+    $("open").textContent = T.open;
+    $("open").href = isAndroid
+      ? "intent://d?moxlite=" + payload + "#Intent;scheme=moxlite;package=es.moxlite;S.browser_fallback_url=" +
+        encodeURIComponent(releases) + ";end"
+      : "moxlite://d?moxlite=" + payload;
+    $("download").textContent = T.download;
+    $("download").href = apk;
+    $("copy").textContent = T.copy;
+    $("copy").onclick = function () {
+      var done = function () { $("copy").textContent = T.copied; };
+      if (navigator.clipboard) navigator.clipboard.writeText(deck.t).then(done);
+    };
+    if (deck.id) {
+      $("moxfield").hidden = false;
+      $("moxfield").textContent = T.moxfield;
+      $("moxfield").href = "https://moxfield.com/decks/" + encodeURIComponent(deck.id);
+    }
+    $("actions").hidden = false;
+    $("note").textContent = T.note;
+  }
+
+  if (!match) { fail(T.bad); return; }
+  if (typeof DecompressionStream === "undefined") { fail(T.old); return; }
+  inflate(base64UrlToBytes(match[1]))
+    .then(function (json) { render(JSON.parse(json)); })
+    .catch(function () { fail(T.bad); });
+})();
+</script>
+</body>
+</html>

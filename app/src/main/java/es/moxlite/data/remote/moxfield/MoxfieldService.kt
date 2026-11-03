@@ -172,6 +172,12 @@ data class DeckQuery(
     val text: String = "",
     val format: String? = null,
     val authorUserName: String? = null,
+    /** Id de impresión de Moxfield del comandante (no el uniqueCardId). */
+    val commanderCardId: String? = null,
+    val minBracket: Int? = null,
+    val maxBracket: Int? = null,
+    /** "Hub" (tipo de mazo) de Moxfield. */
+    val hubName: String? = null,
     val sortType: String = "updated",
     val sortDirection: String = "descending",
     val pageNumber: Int = 1,
@@ -182,9 +188,17 @@ data class DeckQuery(
         put("pageSize", pageSize.toString())
         put("sortType", sortType)
         put("sortDirection", sortDirection)
-        if (text.isNotBlank()) put("q", text.trim())
+        if (text.isNotBlank()) {
+            // La web manda `filter`; versiones anteriores usaban `q`. El que no conoce, lo ignora.
+            put("q", text.trim())
+            put("filter", text.trim())
+        }
         format?.takeIf { it.isNotBlank() }?.let { put("fmt", it) }
         authorUserName?.takeIf { it.isNotBlank() }?.let { put("authorUserNames", it.trim()) }
+        commanderCardId?.takeIf { it.isNotBlank() }?.let { put("commanderCardId", it) }
+        minBracket?.let { put("minBracket", it.toString()) }
+        maxBracket?.let { put("maxBracket", it.toString()) }
+        hubName?.takeIf { it.isNotBlank() }?.let { put("hubName", it.trim()) }
     }
 
     /** Parámetros de /v2/decks/personal/search (usa `filter` en vez de `q`). */

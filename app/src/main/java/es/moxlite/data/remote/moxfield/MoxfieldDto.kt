@@ -3,7 +3,10 @@ package es.moxlite.data.remote.moxfield
 import es.moxlite.i18n.I18n
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -90,7 +93,24 @@ data class MoxDeckDto(
     /** Carta destacada (id de impresión de Moxfield). */
     val mainCardId: String? = null,
     val boards: Map<String, MoxBoardDto> = emptyMap(),
-)
+    // Números como Double: Moxfield puede mandarlos como 3 o 3.0.
+    val bracket: Double? = null,
+    val userBracket: Double? = null,
+    val autoBracket: Double? = null,
+    /** Hubs del mazo: objetos `{name, description}` (o texto). */
+    val hubs: List<JsonElement> = emptyList(),
+) {
+    val effectiveBracket: Int? get() = (bracket ?: userBracket ?: autoBracket)?.toInt()?.takeIf { it in 1..5 }
+    val hubNames: List<String> get() = hubs.mapNotNull(::nameOf)
+}
+
+/** Nombre de un elemento que puede ser `"texto"` u `{ "name": … }` (o `{ "card": { "name": … } }`). */
+internal fun nameOf(element: JsonElement): String? = when (element) {
+    is JsonPrimitive -> element.contentOrNull
+    is JsonObject -> (element["name"] as? JsonPrimitive)?.contentOrNull
+        ?: (element["card"] as? JsonObject)?.let { (it["name"] as? JsonPrimitive)?.contentOrNull }
+    else -> null
+}?.takeIf { it.isNotBlank() }
 
 @Serializable
 data class MoxDeckSummaryDto(
@@ -109,7 +129,19 @@ data class MoxDeckSummaryDto(
     val publicUrl: String? = null,
     /** Carta destacada: id de impresión de Moxfield (sirve para la miniatura). */
     val mainCardId: String? = null,
-)
+    val createdAtUtc: String? = null,
+    val bracket: Double? = null,
+    val userBracket: Double? = null,
+    val autoBracket: Double? = null,
+    val hubNames: List<String> = emptyList(),
+    /** Forma no documentada: se sacan los nombres si los trae. */
+    val commanders: List<JsonElement> = emptyList(),
+) {
+    val commanderNames: List<String> get() = commanders.mapNotNull(::nameOf)
+
+    /** Bracket que muestra Moxfield: el que elige el autor y, si no, el calculado. */
+    val effectiveBracket: Int? get() = (bracket ?: userBracket ?: autoBracket)?.toInt()?.takeIf { it in 1..5 }
+}
 
 @Serializable
 data class MoxPage<T>(

@@ -39,6 +39,15 @@ android {
         // Repositorio de GitHub donde se buscan actualizaciones (en CI, el propio repositorio).
         val updateRepository = providers.environmentVariable("GITHUB_REPOSITORY").getOrElse("katarem/moxlite")
         buildConfigField("String", "UPDATE_REPOSITORY", "\"$updateRepository\"")
+
+        // Enlaces para compartir mazos: la página de GitHub Pages del repositorio (carpeta site/).
+        // https://<usuario>.github.io/<repo>/d/#moxlite=<mazo comprimido>
+        val (pagesOwner, pagesRepo) = updateRepository.split("/").let { it[0].lowercase() to it[1] }
+        val shareHost = "$pagesOwner.github.io"
+        val sharePath = "/$pagesRepo/d/"
+        buildConfigField("String", "SHARE_BASE_URL", "\"https://$shareHost$sharePath\"")
+        manifestPlaceholders["shareHost"] = shareHost
+        manifestPlaceholders["sharePathPrefix"] = "/$pagesRepo/d"
     }
 
     signingConfigs {

@@ -16,17 +16,24 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 abstract class DeckDao {
 
-    @Query(
-        """
-        SELECT * FROM decks
-        WHERE isSaved = 1 OR isLocalOnly = 1 OR (:me != '' AND lower(authorUserName) = lower(:me))
-        ORDER BY hasLocalChanges DESC, name COLLATE NOCASE
-        """
-    )
-    abstract fun observeMine(me: String): Flow<List<DeckEntity>>
+    /** Todos los mazos del móvil (para "Mis mazos": pestañas, búsqueda y filtros se aplican en memoria). */
+    @Query("SELECT * FROM decks")
+    abstract fun observeAll(): Flow<List<DeckEntity>>
 
-    @Query("SELECT * FROM decks WHERE isSaved = 0 AND isLocalOnly = 0 AND fetchedAt > 0 ORDER BY fetchedAt DESC LIMIT 20")
-    abstract fun observeRecent(): Flow<List<DeckEntity>>
+    @Query("UPDATE decks SET viewedAt = :at WHERE publicId = :id")
+    abstract suspend fun markViewed(id: String, at: Long)
+
+    @Query("UPDATE decks SET commanders = :commanders WHERE publicId = :id")
+    abstract suspend fun setCommanders(id: String, commanders: String)
+
+    @Upsert
+    abstract suspend fun upsertAlias(alias: DeckAliasEntity)
+
+    @Query("SELECT newId FROM deck_aliases WHERE oldId = :oldId")
+    abstract fun observeAlias(oldId: String): Flow<String?>
+
+    @Query("SELECT newId FROM deck_aliases WHERE oldId = :oldId")
+    abstract suspend fun getAlias(oldId: String): String?
 
     @Query("SELECT * FROM decks WHERE publicId = :id")
     abstract fun observe(id: String): Flow<DeckEntity?>
@@ -89,10 +96,14 @@ abstract class DeckDao {
     /** Cuando un mazo local se crea en Moxfield, pasa a usar el publicId real. */
     @Transaction
     open suspend fun changeDeckId(old: DeckEntity, newPublicId: String, remoteId: String) {
-        upsert(old.copy(publicId = newPublicId, remoteId = remoteId, isLocalOnly = false))
+        // Se lee de nuevo: puede haber cambiado (p. ej. se abrió) mientras se subía.
+        val current = get(old.publicId) ?: old
+        upsert(current.copy(publicId = newPublicId, remoteId = remoteId, isLocalOnly = false))
         moveCardsToDeck(old.publicId, newPublicId)
         moveOpsToDeck(old.publicId, newPublicId)
         deleteDeckRow(old.publicId)
+        // La pantalla que lo tenga abierto (y los enlaces viejos) siguen al id nuevo.
+        upsertAlias(DeckAliasEntity(old.publicId, newPublicId))
     }
 }
 
@@ -157,9 +168,9 @@ abstract class LocalizationDao {
 @Database(
     entities = [
         DeckEntity::class, DeckCardEntity::class, PendingOpEntity::class, FollowedUserEntity::class,
-        CardLocalizationEntity::class,
+        CardLocalizationEntity::class, DeckAliasEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -182,9 +193,31 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /**
+         * v3: bracket, tipos (hubs), comandantes y "visto" para filtrar y ordenar en "Mis mazos";
+         * alias de ids para seguir a un mazo creado en el móvil cuando se sube a Moxfield.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE decks ADD COLUMN bracket INTEGER")
+                db.execSQL("ALTER TABLE decks ADD COLUMN hubs TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE decks ADD COLUMN commanders TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE decks ADD COLUMN viewedAt INTEGER NOT NULL DEFAULT 0")
+                // Los que salían en "Vistos recientemente" siguen saliendo.
+                db.execSQL("UPDATE decks SET viewedAt = fetchedAt WHERE isSaved = 0 AND isLocalOnly = 0 AND fetchedAt > 0")
+                db.execSQL(
+                    "UPDATE decks SET commanders = COALESCE((SELECT group_concat(name, char(10)) FROM deck_cards " +
+                        "WHERE deck_cards.deckId = decks.publicId AND deck_cards.board = 'commanders'), '')"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS deck_aliases (oldId TEXT NOT NULL, newId TEXT NOT NULL, PRIMARY KEY(oldId))"
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "moxlite.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
     }
 }

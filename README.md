@@ -10,9 +10,10 @@ Cliente Android personal para Moxfield: consultar y gestionar mazos **con y sin 
 |---|---|
 | Iniciar sesión **una vez** (WebView) y quedarse con la sesión: se renueva sola | ✅ |
 | Cuenta: ver estado de la sesión, cambios pendientes y cerrar sesión | ✅ |
-| "Mis mazos": todos los tuyos (también privados y ocultos) + los guardados en el móvil | ✅ |
+| "Mis mazos" por pestañas (míos, guardados, recientes) con buscador, filtros y orden | ✅ |
 | **Subir cambios a Moxfield**: crear, importar, añadir, cantidades, mover, quitar, renombrar, cambiar arte | ✅ (rutas de la web, sin probar en vivo, ver abajo) |
 | Ver cualquier mazo público (por enlace, búsqueda o usuario), con miniatura en las listas | ✅ |
+| Buscar mazos con filtros (formato, colores, comandante, bracket, tipo) y orden (actualizados, nuevos, populares, vistos) | ✅ |
 | Vistas del mazo: texto, lista, cuadrícula y carta completa; agrupar por tipo/coste/color y ordenar | ✅ |
 | Añadir cartas con buscador con imágenes y en cualquier idioma ("rayo" o "lightning bolt") | ✅ |
 | Elegir arte / edición de cada carta | ✅ |
@@ -53,11 +54,16 @@ Durante los partidos, las operadoras españolas bloquean IPs de Cloudflare por o
 
 ### Compartir mazos
 
-"Compartir enlace" genera `https://moxfield.com/decks/<id>#moxlite=<mazo comprimido>`. Es un enlace normal (se puede tocar en WhatsApp), lleva el mazo dentro en el fragmento `#` (no llega a ningún servidor) y:
+"Compartir enlace" genera `https://katarem.github.io/moxlite/d/#moxlite=<mazo comprimido>` (no un enlace de Moxfield). Es un enlace https normal (se puede tocar en WhatsApp), lleva el mazo entero dentro en el fragmento `#` (no llega a ningún servidor) y:
 
-- con Moxlite se abre en la app (hay que activar una vez **Ajustes → Abrir enlaces de Moxfield con Moxlite**, porque Android no deja verificar un dominio que no es nuestro);
-- sin Moxlite abre el mazo en la web de Moxfield;
-- si el mazo solo existe en el móvil de quien lo manda, Moxlite ofrece importarlo.
+- con Moxlite se abre directamente en la app si se ha activado **Ajustes → Abrir enlaces de mazos con Moxlite** ("Abrir enlaces compatibles");
+- si no, se abre la página `site/d/` (GitHub Pages), que enseña la lista de cartas y tiene **Abrir en Moxlite** (`moxlite://`), **Descargar Moxlite**, **Copiar lista** y **Ver en Moxfield**;
+- si el mazo solo existe en el móvil de quien lo manda, Moxlite ofrece importarlo;
+- los enlaces antiguos (`https://moxfield.com/decks/<id>#moxlite=…`) se siguen abriendo.
+
+La página se publica con `.github/workflows/pages.yml` en cada cambio de `site/`. **Hay que activarlo una vez**: Settings → Pages → Source: *GitHub Actions*. El dominio sale del repositorio (`<usuario>.github.io/<repo>`), así que un fork usa el suyo.
+
+Para que Android abra los enlaces en la app sin tocar ajustes haría falta publicar `/.well-known/assetlinks.json` en la raíz de `katarem.github.io` (un repositorio `katarem.github.io`) con la huella del certificado de firma; la app ya declara `autoVerify` para ese dominio.
 
 ### Escritura: qué está verificado
 
@@ -108,6 +114,7 @@ Tests unitarios JVM en `app/src/test` (JUnit 4 + `kotlinx-coroutines-test`), sin
 | `data/sync/WriteParsingTest` | Respuestas de búsqueda de cartas de Moxfield, nombres, errores de escritura |
 | `data/session/AuthResultTest` | Respuesta de renovación de sesión (token, usuario, caducidad) |
 | `domain/ShareLinkTest` | Enlaces para compartir: ida y vuelta, mazos locales, datos corruptos |
+| `domain/DeckFiltersTest` | Filtros y orden de mazos (colores, comandante, bracket, tipo), campos nuevos de la búsqueda |
 | `ui/deck/DeckLayoutTest` | Agrupar y ordenar cartas para las vistas, nombres e imágenes traducidos |
 | `i18n/I18nTest` | Idioma de la app y textos en español/inglés |
 | `data/session/ApiTrafficLogTest` | Registro de API: filtrado, redacción de secretos, duplicados, límite |

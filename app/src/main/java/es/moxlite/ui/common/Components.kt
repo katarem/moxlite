@@ -56,6 +56,7 @@ data class DeckRowData(
     val localOnly: Boolean = false,
     val localChanges: Boolean = false,
     val isPrivate: Boolean = false,
+    val bracket: Int? = null,
 )
 
 @Composable
@@ -89,7 +90,11 @@ fun DeckRow(deck: DeckRowData, onClick: () -> Unit) {
                 ColorPips(deck.colors)
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    listOf(deck.format.ifBlank { null }, deck.author.ifBlank { null }?.let { "@$it" })
+                    listOf(
+                        deck.format.ifBlank { null }?.let { LocalStrings.current.formatLabel(it) },
+                        deck.bracket?.let { "B$it" },
+                        deck.author.ifBlank { null }?.let { "@$it" },
+                    )
                         .filterNotNull().joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -178,9 +183,11 @@ fun SectionHeader(text: String, trailing: String? = null) {
     }
 }
 
+/** Claves de formato de Moxfield (`fmt`). */
 val FORMATS = listOf(
-    "commander", "standard", "pioneer", "modern", "legacy", "vintage", "pauper",
-    "historic", "brawl", "oathbreaker", "paupercommander", "none",
+    "commander", "standard", "pioneer", "modern", "legacy", "vintage", "pauper", "premodern",
+    "timeless", "historic", "brawl", "historicBrawl", "oathbreaker", "pauperEdh", "duelCommander",
+    "predh", "none",
 )
 
 /** Visibilidades de mazo de Moxfield. */

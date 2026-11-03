@@ -3,6 +3,8 @@ package es.moxlite.i18n
 import es.moxlite.data.settings.DeckGrouping
 import es.moxlite.data.settings.DeckSorting
 import es.moxlite.data.settings.DeckViewMode
+import es.moxlite.domain.ColorMatch
+import es.moxlite.domain.DeckSort
 
 /** Español (idioma por defecto). */
 object Es : Strings {
@@ -100,9 +102,6 @@ object Es : Strings {
     override fun opPrinting(name: String, set: String, number: String) = "Arte de $name: $set $number"
 
     override val myDecks = "Mis mazos"
-    override val yoursAndSaved = "Tuyos y guardados"
-    override val savedOnPhone = "En el móvil"
-    override val recentlyViewed = "Vistos recientemente"
     override val noDecksYet =
         "Aún no hay mazos en el móvil.\nInicia sesión para traer los tuyos, busca mazos o abre un enlace de Moxfield."
     override val noDecksYetLoggedIn = "Todavía no hay mazos. Desliza hacia abajo para traerlos de Moxfield o crea uno con +."
@@ -174,7 +173,8 @@ object Es : Strings {
     override val savingOffline = "Guardando cartas e imágenes para usar sin conexión…"
     override val noLongerOffline = "Ya no se guarda sin conexión"
     override val shareLink = "Compartir enlace"
-    override fun shareMessage(deckName: String, link: String) = "$deckName\n$link\n(Ábrelo con Moxlite para verlo aunque Moxfield no cargue)"
+    override fun shareMessage(deckName: String, link: String) =
+        "$deckName\n$link\n(Se abre en Moxlite aunque Moxfield no cargue; sin la app, se ve la lista en el navegador)"
     override fun shareTitle(deckName: String) = "Compartir $deckName"
     override val exportText = "Exportar como texto"
     override val exportQuestion =
@@ -235,12 +235,73 @@ object Es : Strings {
     override val searchDecks = "Buscar mazos"
     override val searchDecksPlaceholder = "Nombre, comandante, carta…"
     override val searchDecksIntro = "Busca mazos públicos de Moxfield. Los que abras se guardan como recientes."
-    override fun deckSortLabel(sortType: String) = when (sortType) {
-        "likes" -> "Más gustados"
-        "views" -> "Más vistos"
-        "created" -> "Nuevos"
-        else -> "Recientes"
+    override fun deckSortLabel(sort: DeckSort) = when (sort) {
+        DeckSort.UPDATED -> "Actualizados"
+        DeckSort.CREATED -> "Nuevos"
+        DeckSort.LIKES -> "Más populares"
+        DeckSort.VIEWS -> "Más vistos"
+        DeckSort.VIEWED -> "Abiertos hace poco"
+        DeckSort.NAME -> "Nombre"
     }
+    override val searchDecksColorsHint = "Moxfield no filtra por colores: se filtran aquí y se piden más páginas, puede tardar un poco."
+
+    override val filterSort = "Orden"
+    override val filterFormat = "Formato"
+    override fun formatLabel(format: String) = when (format.lowercase()) {
+        "commander" -> "Commander"
+        "standard" -> "Estándar"
+        "pioneer" -> "Pioneer"
+        "modern" -> "Modern"
+        "legacy" -> "Legacy"
+        "vintage" -> "Vintage"
+        "pauper" -> "Pauper"
+        "premodern" -> "Premodern"
+        "timeless" -> "Timeless"
+        "historic" -> "Histórico"
+        "brawl" -> "Brawl"
+        "historicbrawl" -> "Brawl histórico"
+        "oathbreaker" -> "Oathbreaker"
+        "pauperedh", "paupercommander" -> "Pauper Commander"
+        "duelcommander" -> "Duel Commander"
+        "predh" -> "PreDH"
+        "none" -> "Sin formato"
+        "" -> ""
+        else -> format.replaceFirstChar { it.uppercase() }
+    }
+    override val filterColors = "Colores"
+    override val colorless = "Incoloro"
+    override fun colorMatchLabel(match: ColorMatch) = when (match) {
+        ColorMatch.EXACT -> "Exactos"
+        ColorMatch.INCLUDES -> "Al menos"
+        ColorMatch.WITHIN -> "Como máximo"
+    }
+    override val filterCommander = "Comandante"
+    override val commanderPlaceholder = "Nombre del comandante (en cualquier idioma)"
+    override fun commanderNotFound(name: String) = "Moxfield no reconoce \"$name\" como carta"
+    override val filterBracket = "Bracket"
+    override fun bracketLabel(bracket: Int) = when (bracket) {
+        1 -> "1 · Exhibición"
+        2 -> "2 · Básico"
+        3 -> "3 · Mejorado"
+        4 -> "4 · Optimizado"
+        5 -> "5 · cEDH"
+        else -> bracket.toString()
+    }
+    override val filterHub = "Tipo"
+    override val hubPlaceholder = "Tipo de mazo (Tokens, Aristocrats, Budget…)"
+    override val anyOption = "Cualquiera"
+    override val clearFilters = "Quitar filtros"
+    override val applyFilters = "Aplicar"
+    override val noDecksMatch = "Ningún mazo coincide con la búsqueda y los filtros."
+
+    override val tabMine = "Míos"
+    override val tabSaved = "Guardados"
+    override val tabRecent = "Recientes"
+    override val searchMyDecksPlaceholder = "Buscar por nombre, autor o comandante"
+    override val noSavedDecks = "Aún no has guardado mazos de otros. Abre uno y toca el icono de descarga para tenerlo sin conexión."
+    override val noRecentDecks = "Aquí aparecen los mazos que abras."
+    override val noOwnDecksNoAccount =
+        "Aquí salen tus mazos de Moxfield y los que crees en el móvil.\nInicia sesión para traer los tuyos o crea uno con +."
     override val users = "Usuarios"
     override val searchUserPlaceholder = "Buscar usuario de Moxfield"
     override val searchUserHint = "Pulsa buscar en el teclado para ir directamente a ese usuario"
@@ -304,9 +365,9 @@ object Es : Strings {
     override val proxyHost = "Servidor"
     override val proxyPort = "Puerto"
     override val saveAndEnable = "Guardar y activar"
-    override val openLinksWithApp = "Abrir enlaces de Moxfield con Moxlite"
+    override val openLinksWithApp = "Abrir enlaces de mazos con Moxlite"
     override val openLinksWithAppHint =
-        "Activa \"Abrir enlaces compatibles\" para que los enlaces de mazos (también los que te compartan) se abran en la app"
+        "Activa \"Abrir enlaces compatibles\" para que los enlaces que te compartan desde Moxlite y los de Moxfield se abran directamente en la app"
     override val storage = "Almacenamiento"
     override val savedImages = "Imágenes de cartas guardadas"
     override val about = "Acerca de"

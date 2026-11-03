@@ -262,6 +262,9 @@ fun DeckScreen(
                         },
                     )
                 }
+                // Mientras Room responde o el mazo cambia de id (recién subido a Moxfield):
+                // nunca una pantalla en blanco.
+                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
         }
     }
@@ -516,7 +519,13 @@ private fun DeckHeader(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ColorPips(deck.colorIdentity, size = 14)
                     Spacer(Modifier.width(8.dp))
-                    Text(deck.format, style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        listOfNotNull(
+                            LocalStrings.current.formatLabel(deck.format).ifBlank { null },
+                            deck.bracket?.let { "Bracket $it" },
+                        ).joinToString(" · "),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
                 }
                 if (deck.authorUserName.isNotBlank()) {
                     Text(

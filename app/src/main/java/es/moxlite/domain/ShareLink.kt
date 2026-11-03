@@ -1,5 +1,6 @@
 package es.moxlite.domain
 
+import es.moxlite.BuildConfig
 import es.moxlite.data.remote.Http
 import kotlinx.serialization.Serializable
 import java.io.ByteArrayOutputStream
@@ -24,28 +25,37 @@ data class DeckSnapshot(
 /**
  * Enlaces para compartir mazos entre usuarios de Moxlite:
  *
- * `https://moxfield.com/decks/<publicId>#moxlite=<lista comprimida>`
+ * `https://<usuario>.github.io/<repo>/d/#moxlite=<mazo comprimido>`
  *
- * - Es un enlace https normal, así que se puede tocar en WhatsApp, Telegram, etc. Moxlite abre
- *   los enlaces de moxfield.com (si en Android está activado "Abrir enlaces compatibles").
+ * - Es un enlace https normal (se puede tocar en WhatsApp, Telegram…) a la página `site/d/` del
+ *   repositorio, publicada en GitHub Pages. No es un enlace de Moxfield.
  * - Lleva el mazo entero dentro (deflate + base64url en el fragmento `#`, que no llega a ningún
- *   servidor): quien lo recibe lo ve aunque Moxfield esté bloqueado o el mazo sea privado o
- *   solo exista en el móvil de quien lo manda.
- * - Sin Moxlite, el enlace abre el mazo en la web de Moxfield (si es público).
+ *   servidor): quien lo recibe lo ve aunque Moxfield esté bloqueado, el mazo sea privado o solo
+ *   exista en el móvil de quien lo manda.
+ * - Con Moxlite se abre directamente en la app si en Android está activado "Abrir enlaces
+ *   compatibles" para Moxlite. Si no, se abre la página, que enseña la lista y tiene el botón
+ *   "Abrir en Moxlite" (`moxlite://d?moxlite=…`) y el enlace para descargar la app.
+ * - [parse] entiende también los enlaces antiguos (`https://moxfield.com/decks/<id>#moxlite=…`).
  */
 object ShareLink {
     const val PARAM = "moxlite"
 
-    /** Ruta para mazos que no están en Moxfield. */
+    /** Esquema propio de la app (lo usa el botón de la página). */
+    const val SCHEME = "moxlite"
+
+    /** Ruta antigua para mazos que no están en Moxfield (enlaces viejos). */
     const val LOCAL_PATH = "moxlite-share"
 
     private const val MAX_INFLATED = 512 * 1024
 
-    fun build(snapshot: DeckSnapshot): String {
-        val json = Http.json.encodeToString(DeckSnapshot.serializer(), snapshot)
-        val path = snapshot.id ?: LOCAL_PATH
-        return "https://moxfield.com/decks/$path#$PARAM=${encode(json)}"
-    }
+    fun build(snapshot: DeckSnapshot, baseUrl: String = BuildConfig.SHARE_BASE_URL): String =
+        "$baseUrl#$PARAM=${payload(snapshot)}"
+
+    /** Enlace que abre la app directamente (sin pasar por el navegador). */
+    fun appLink(snapshot: DeckSnapshot): String = "$SCHEME://d?$PARAM=${payload(snapshot)}"
+
+    private fun payload(snapshot: DeckSnapshot): String =
+        encode(Http.json.encodeToString(DeckSnapshot.serializer(), snapshot))
 
     /** Busca un enlace de Moxlite en [text] (puede venir en medio de un mensaje). */
     fun parse(text: String): DeckSnapshot? {

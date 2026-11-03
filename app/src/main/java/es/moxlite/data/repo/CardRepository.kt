@@ -43,6 +43,18 @@ class CardRepository(private val api: ScryfallService) {
         ).take(MAX_RESULTS)
     }
 
+    /**
+     * Cartas que pueden ser comandante cuyo nombre (en cualquier idioma) contiene [text].
+     * Devuelve pares (nombre a mostrar, nombre en inglés), sin repetir.
+     */
+    suspend fun commanderSuggestions(text: String): List<Pair<String, String>> {
+        val q = text.trim().replace("\"", "")
+        if (q.length < 2) return emptyList()
+        return searchOrEmpty(
+            mapOf("q" to "is:commander \"$q\"", "include_multilingual" to "true", "unique" to "cards", "order" to "edhrec")
+        ).map { it.displayName to it.name }.distinctBy { it.second }.take(MAX_RESULTS)
+    }
+
     /** Todas las impresiones (artes) de una carta, de la más nueva a la más antigua. */
     suspend fun printings(cardName: String): List<ScryCard> = searchOrEmpty(
         mapOf(

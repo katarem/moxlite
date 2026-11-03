@@ -37,6 +37,27 @@
                 <data android:pathPrefix="/decks/" />
             </intent-filter>
 
+            <!-- Enlaces de Moxlite para compartir mazos (página de GitHub Pages del repositorio).
+                 Android solo los abre directamente si se activa "Abrir enlaces compatibles"
+                 (o si el dominio publica assetlinks.json); si no, los abre la página, que tiene
+                 un botón para abrirlos en la app. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="${shareHost}" />
+                <data android:pathPrefix="${sharePathPrefix}" />
+            </intent-filter>
+
+            <!-- moxlite://d?moxlite=<mazo>: lo usa el botón "Abrir en Moxlite" de la página -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="moxlite" />
+            </intent-filter>
+
             <!-- Compartir un enlace o una lista en texto hacia la app -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
