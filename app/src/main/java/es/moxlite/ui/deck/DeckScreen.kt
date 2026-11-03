@@ -179,6 +179,8 @@ fun DeckScreen(
     }
 
     val d = deck
+    // Box: "Añadir carta" se pinta encima del Scaffold en la misma ventana (ver AddCardDialog).
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -281,6 +283,9 @@ fun DeckScreen(
         }
     }
 
+    if (dialog == "add") AddCardDialog(vm = vm, onDismiss = { dialog = null; vm.clearSearch() })
+    }
+
     selected?.let { card ->
         // Siempre la versión actual de la fila (la cantidad o el arte pueden haber cambiado).
         val current = cards.firstOrNull { it.board == card.board && it.cardKey == card.cardKey }
@@ -346,7 +351,6 @@ fun DeckScreen(
             onDismiss = { dialog = null },
             onConfirm = { dialog = null; vm.removeFromDevice() },
         )
-        "add" -> AddCardDialog(vm = vm, onDismiss = { dialog = null; vm.clearSearch() })
     }
 }
 
