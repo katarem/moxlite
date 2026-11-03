@@ -32,18 +32,23 @@ import androidx.compose.ui.unit.dp
 import es.moxlite.data.remote.userMessage
 import es.moxlite.domain.DeckText
 import es.moxlite.ui.common.FORMATS
+import es.moxlite.ui.common.LocalStrings
 import es.moxlite.ui.common.appContainer
 import kotlinx.coroutines.launch
 
-/** Crea un mazo local a partir de una lista en texto (export de Moxfield, Arena, MTGO…). */
+/** Datos con los que se abre la pantalla (texto compartido, enlace de Moxlite…). */
+data class ImportDraft(val name: String = "", val format: String = "commander", val text: String = "")
+
+/** Crea un mazo a partir de una lista en texto (export de Moxfield, Arena, MTGO…) y lo sube a Moxfield. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ImportScreen(initialText: String, onBack: () -> Unit, onImported: (String) -> Unit) {
+fun ImportScreen(draft: ImportDraft, onBack: () -> Unit, onImported: (String) -> Unit) {
     val container = appContainer()
+    val t = LocalStrings.current
     val scope = rememberCoroutineScope()
-    var name by remember { mutableStateOf("") }
-    var format by remember { mutableStateOf("commander") }
-    var text by remember { mutableStateOf(initialText) }
+    var name by remember { mutableStateOf(draft.name) }
+    var format by remember { mutableStateOf(draft.format) }
+    var text by remember { mutableStateOf(draft.text) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     val parsedCount = remember(text) { DeckText.parse(text).sumOf { it.quantity } }
@@ -51,8 +56,8 @@ fun ImportScreen(initialText: String, onBack: () -> Unit, onImported: (String) -
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Importar lista") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Atrás") } },
+                title = { Text(t.importList) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, t.back) } },
             )
         },
     ) { padding ->
@@ -60,19 +65,19 @@ fun ImportScreen(initialText: String, onBack: () -> Unit, onImported: (String) -
             Modifier.padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre del mazo") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(t.deckName) }, singleLine = true, modifier = Modifier.fillMaxWidth())
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 FORMATS.forEach { f -> FilterChip(selected = format == f, onClick = { format = f }, label = { Text(f) }) }
             }
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
-                label = { Text("Lista") },
+                label = { Text(t.list) },
                 placeholder = { Text("Commander\n1 Atraxa, Praetors' Voice\n\nDeck\n1 Sol Ring (C21) 263\n4 Island") },
                 minLines = 10,
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text("$parsedCount cartas reconocidas", style = MaterialTheme.typography.labelMedium)
+            Text(t.cardsRecognized(parsedCount), style = MaterialTheme.typography.labelMedium)
             message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(
                 enabled = !busy && parsedCount > 0 && name.isNotBlank(),
@@ -83,7 +88,7 @@ fun ImportScreen(initialText: String, onBack: () -> Unit, onImported: (String) -
                         runCatching { container.deckRepository.importText(name, format, text) }
                             .onSuccess { r ->
                                 if (r.unresolved.isNotEmpty()) {
-                                    message = "No encontradas en Scryfall (se guardan solo con nombre): " + r.unresolved.joinToString()
+                                    message = t.notFoundInScryfall(r.unresolved.joinToString())
                                 }
                                 onImported(r.deckId)
                             }
@@ -92,7 +97,7 @@ fun ImportScreen(initialText: String, onBack: () -> Unit, onImported: (String) -
                     }
                 },
             ) {
-                if (busy) CircularProgressIndicator(Modifier.padding(end = 8.dp)) else Text("Importar")
+                if (busy) CircularProgressIndicator(Modifier.padding(end = 8.dp)) else Text(t.importAction)
             }
         }
     }

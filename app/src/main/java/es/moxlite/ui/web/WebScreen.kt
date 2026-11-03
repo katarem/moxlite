@@ -2,6 +2,7 @@ package es.moxlite.ui.web
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -31,45 +32,77 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import es.moxlite.data.remote.moxfield.MoxfieldIds
 import es.moxlite.data.session.MoxfieldWebBridge
+import es.moxlite.data.sync.SyncWorker
+import es.moxlite.ui.common.LocalStrings
 import es.moxlite.ui.common.appContainer
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 enum class WebMode {
-    /** Iniciar sesión: se cierra solo al capturar el token. */
+    /** Iniciar sesión: en cuanto se detecta la sesión se guarda y se vuelve a la app. */
     LOGIN,
 
     /** Navegar por Moxfield (también sirve para pasar el reto de Cloudflare). */
     BROWSE,
 }
 
+/** Páginas en las que todavía no se ha iniciado sesión. */
+private val SIGN_IN_PAGES = listOf("/account/signin", "/account/register", "/account/forgot", "/account/reset")
+
 @SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WebScreen(mode: WebMode, startUrl: String?, onBack: () -> Unit, openDeck: (String) -> Unit) {
     val container = appContainer()
+    val t = LocalStrings.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val session by container.session.state.collectAsStateWithLifecycle()
-    val wasLoggedIn = remember { session.isLoggedIn }
     val snackbar = remember { SnackbarHostState() }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var progress by remember { mutableStateOf(true) }
     var title by remember { mutableStateOf("Moxfield") }
     var currentUrl by remember { mutableStateOf<String?>(null) }
+    var loggedIn by remember { mutableStateOf(false) }
+    var probeJob by remember { mutableStateOf<Job?>(null) }
 
-    // En modo login: cuando aparece el token, avisa y vuelve.
-    LaunchedEffect(session.isLoggedIn) {
-        if (mode == WebMode.LOGIN && session.isLoggedIn && !wasLoggedIn) {
-            snackbar.showSnackbar("Sesión iniciada" + if (session.userName.isNotBlank()) " como @${session.userName}" else "")
-            delay(800)
-            onBack()
+    /**
+     * Comprueba si ya hay sesión pidiendo un token con las cookies del WebView. Se llama al salir
+     * de la página de login y cuando la web manda un token propio.
+     */
+    fun probe(url: String?) {
+        if (mode != WebMode.LOGIN || loggedIn) return
+        if (url == null || !url.contains("moxfield.com") || SIGN_IN_PAGES.any { url.contains(it) }) return
+        if (probeJob?.isActive == true) return
+        probeJob = scope.launch {
+            CookieManager.getInstance().flush()
+            val ok = container.auth.refresh(force = true, probing = true)
+            val state = container.session.state.value
+            if (ok && state.hasAccount && !loggedIn) {
+                loggedIn = true
+                container.settings.setOnboarded(true)
+                SyncWorker.runNow(context)
+                snackbar.showSnackbar(t.loggedInAs(state.userName))
+                delay(700)
+                onBack()
+            }
         }
+    }
+
+    // La web ha usado un token: buena señal de que ya ha entrado.
+    LaunchedEffect(session.accessToken) {
+        if (session.accessToken != null) probe(currentUrl ?: MoxfieldWebBridge.HOME_URL)
     }
 
     BackHandler {
@@ -82,13 +115,13 @@ fun WebScreen(mode: WebMode, startUrl: String?, onBack: () -> Unit, openDeck: (S
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (mode == WebMode.LOGIN) "Iniciar sesión en Moxfield" else title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Cerrar") } },
+                title = { Text(if (mode == WebMode.LOGIN) t.loginTitle else title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, t.close) } },
                 actions = {
-                    if (deckInPage != null) {
-                        IconButton(onClick = { openDeck(deckInPage) }) { Icon(Icons.Outlined.Style, "Abrir este mazo en la app") }
+                    if (deckInPage != null && mode == WebMode.BROWSE) {
+                        IconButton(onClick = { openDeck(deckInPage) }) { Icon(Icons.Outlined.Style, t.openDeckInApp) }
                     }
-                    IconButton(onClick = { webView?.reload() }) { Icon(Icons.Outlined.Refresh, "Recargar") }
+                    IconButton(onClick = { webView?.reload() }) { Icon(Icons.Outlined.Refresh, t.reload) }
                 },
             )
         },
@@ -98,8 +131,7 @@ fun WebScreen(mode: WebMode, startUrl: String?, onBack: () -> Unit, openDeck: (S
             if (mode == WebMode.LOGIN) {
                 Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
                     Text(
-                        "Entra con usuario y contraseña de Moxfield. El inicio con Google no funciona dentro de apps. " +
-                            "La app no ve tu contraseña: solo guarda la sesión que Moxfield crea al entrar.",
+                        t.loginHint,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.fillMaxWidth().padding(12.dp),
                     )
@@ -126,11 +158,13 @@ fun WebScreen(mode: WebMode, startUrl: String?, onBack: () -> Unit, openDeck: (S
                                 progress = false
                                 currentUrl = url
                                 title = view.title?.takeIf { it.isNotBlank() } ?: "Moxfield"
+                                probe(url)
                             }
 
                             override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
                                 // Moxfield es una SPA: las rutas cambian sin recargar.
                                 currentUrl = url
+                                probe(url)
                             }
                         }
                         loadUrl(
@@ -139,7 +173,10 @@ fun WebScreen(mode: WebMode, startUrl: String?, onBack: () -> Unit, openDeck: (S
                         webView = this
                     }
                 },
-                onRelease = { it.destroy() },
+                onRelease = {
+                    CookieManager.getInstance().flush()
+                    it.destroy()
+                },
             )
         }
     }

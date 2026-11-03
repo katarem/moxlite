@@ -47,7 +47,9 @@ object DeckMapper {
             }
         }
         val author = dto.createdByUser ?: dto.authors.firstOrNull()
-        val featured = cards.firstOrNull { it.board == Boards.COMMANDERS }
+        // La carta que el autor eligió como destacada; si no, comandante o la más cara.
+        val featured = dto.mainCardId?.let { main -> cards.firstOrNull { it.moxCardId == main } }
+            ?: cards.firstOrNull { it.board == Boards.COMMANDERS }
             ?: cards.filter { it.board == Boards.MAIN && !it.typeLine.contains("Basic") }.maxByOrNull { it.priceEur ?: 0.0 }
 
         val deck = DeckEntity(
@@ -61,6 +63,7 @@ object DeckMapper {
             authorDisplayName = author?.displayName.orEmpty(),
             colorIdentity = colors(dto.colorIdentity),
             featuredScryfallId = featured?.scryfallId,
+            featuredMoxCardId = dto.mainCardId ?: featured?.moxCardId,
             likeCount = dto.likeCount,
             viewCount = dto.viewCount,
             mainboardCount = cards.filter { it.board == Boards.MAIN }.sumOf { it.quantity },
@@ -89,6 +92,7 @@ object DeckMapper {
             authorUserName = author?.userName.orEmpty(),
             authorDisplayName = author?.displayName.orEmpty(),
             colorIdentity = colors(s.colorIdentity),
+            featuredMoxCardId = s.mainCardId,
             likeCount = s.likeCount,
             viewCount = s.viewCount,
             mainboardCount = s.mainboardCount,

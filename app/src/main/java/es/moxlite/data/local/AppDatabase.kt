@@ -9,6 +9,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -34,6 +36,9 @@ abstract class DeckDao {
 
     @Query("SELECT * FROM decks WHERE isSaved = 1 AND isLocalOnly = 0")
     abstract suspend fun getSaved(): List<DeckEntity>
+
+    @Query("SELECT * FROM decks WHERE :me != '' AND lower(authorUserName) = lower(:me) AND isLocalOnly = 0")
+    abstract suspend fun getOwnedBy(me: String): List<DeckEntity>
 
     @Query("SELECT * FROM decks WHERE hasLocalChanges = 1")
     abstract suspend fun getWithLocalChanges(): List<DeckEntity>
@@ -137,18 +142,49 @@ abstract class UserDao {
     abstract suspend fun delete(userName: String)
 }
 
+@Dao
+abstract class LocalizationDao {
+    @Query("SELECT * FROM card_localizations WHERE lang = :lang")
+    abstract fun observe(lang: String): Flow<List<CardLocalizationEntity>>
+
+    @Query("SELECT * FROM card_localizations WHERE lang = :lang")
+    abstract suspend fun getAll(lang: String): List<CardLocalizationEntity>
+
+    @Upsert
+    abstract suspend fun upsert(rows: List<CardLocalizationEntity>)
+}
+
 @Database(
-    entities = [DeckEntity::class, DeckCardEntity::class, PendingOpEntity::class, FollowedUserEntity::class],
-    version = 1,
+    entities = [
+        DeckEntity::class, DeckCardEntity::class, PendingOpEntity::class, FollowedUserEntity::class,
+        CardLocalizationEntity::class,
+    ],
+    version = 2,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun decks(): DeckDao
     abstract fun pendingOps(): PendingOpDao
     abstract fun users(): UserDao
+    abstract fun localizations(): LocalizationDao
 
     companion object {
+        /** v2: miniatura por id de Moxfield y caché de cartas en otros idiomas. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE decks ADD COLUMN featuredMoxCardId TEXT")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS card_localizations (" +
+                        "setCode TEXT NOT NULL, collectorNumber TEXT NOT NULL, lang TEXT NOT NULL, " +
+                        "scryfallId TEXT, printedName TEXT, checkedAt INTEGER NOT NULL, " +
+                        "PRIMARY KEY(setCode, collectorNumber, lang))"
+                )
+            }
+        }
+
         fun build(context: Context): AppDatabase =
-            Room.databaseBuilder(context, AppDatabase::class.java, "moxlite.db").build()
+            Room.databaseBuilder(context, AppDatabase::class.java, "moxlite.db")
+                .addMigrations(MIGRATION_1_2)
+                .build()
     }
 }

@@ -1,6 +1,11 @@
 package es.moxlite.ui.decks
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Link
@@ -19,7 +25,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MenuAnchorType
@@ -37,6 +45,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -47,8 +56,11 @@ import es.moxlite.AppContainer
 import es.moxlite.data.local.DeckEntity
 import es.moxlite.data.remote.moxfield.MoxfieldIds
 import es.moxlite.data.remote.userMessage
+import es.moxlite.i18n.I18n
 import es.moxlite.ui.common.DeckRow
 import es.moxlite.ui.common.FORMATS
+import es.moxlite.ui.common.LocalStrings
+import es.moxlite.ui.common.VISIBILITIES
 import es.moxlite.ui.common.MessageBox
 import es.moxlite.ui.common.SectionHeader
 import es.moxlite.ui.common.appContainer
@@ -59,7 +71,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -70,8 +81,6 @@ class MyDecksViewModel(private val c: AppContainer) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     val recent: StateFlow<List<DeckEntity>> = repo.observeRecent()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val userName: StateFlow<String> = c.session.state.map { it.userName }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, c.session.state.value.userName)
 
     private val _refreshing = MutableStateFlow(false)
     val refreshing = _refreshing.asStateFlow()
@@ -79,37 +88,49 @@ class MyDecksViewModel(private val c: AppContainer) : ViewModel() {
     val messages = _messages.asSharedFlow()
     private val _navigate = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val navigate = _navigate.asSharedFlow()
+    private var lastAutoSync = 0L
+
+    /** Al abrir la pantalla con sesión: traer la lista de mazos (como mucho cada 10 min). */
+    fun autoSync() {
+        if (!c.session.state.value.hasAccount || !c.connectivity.online.value) return
+        if (System.currentTimeMillis() - lastAutoSync < 10 * 60_000) return
+        lastAutoSync = System.currentTimeMillis()
+        viewModelScope.launch { runCatching { repo.myRemoteDecks() } }
+    }
 
     fun syncFromMoxfield() = viewModelScope.launch {
-        if (userName.value.isBlank()) {
-            _messages.emit("Indica tu usuario de Moxfield en Ajustes o inicia sesión.")
+        val t = I18n.strings
+        if (c.session.state.value.userName.isBlank()) {
+            _messages.emit(t.loginToSeeYourDecks)
             return@launch
         }
         _refreshing.value = true
+        lastAutoSync = System.currentTimeMillis()
         runCatching { repo.myRemoteDecks() }
-            .onSuccess { _messages.emit("${it.size} mazos públicos encontrados") }
+            .onSuccess { _messages.emit(t.decksFound(it.size)) }
             .onFailure { _messages.emit(it.userMessage()) }
         _refreshing.value = false
     }
 
     fun openByLink(text: String) = viewModelScope.launch {
         val id = MoxfieldIds.parsePublicId(text)
-        if (id == null) _messages.emit("No parece un enlace de Moxfield") else _navigate.emit(id)
+        if (id == null) _messages.emit(I18n.strings.notAMoxfieldLink) else _navigate.emit(id)
     }
 
-    fun createDeck(name: String, format: String) = viewModelScope.launch {
-        _navigate.emit(repo.createDeck(name, format))
+    fun createDeck(name: String, format: String, visibility: String) = viewModelScope.launch {
+        _navigate.emit(repo.createDeck(name, format, visibility))
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MyDecksScreen(openDeck: (String) -> Unit, openImport: () -> Unit, openLogin: () -> Unit) {
+fun MyDecksScreen(openDeck: (String) -> Unit, openImport: () -> Unit, openLogin: () -> Unit, openAccount: () -> Unit) {
     val container = appContainer()
+    val t = LocalStrings.current
     val vm: MyDecksViewModel = viewModel { MyDecksViewModel(container) }
     val mine by vm.mine.collectAsStateWithLifecycle()
     val recent by vm.recent.collectAsStateWithLifecycle()
-    val user by vm.userName.collectAsStateWithLifecycle()
+    val session by container.session.state.collectAsStateWithLifecycle()
     val refreshing by vm.refreshing.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var menu by remember { mutableStateOf(false) }
@@ -117,32 +138,47 @@ fun MyDecksScreen(openDeck: (String) -> Unit, openImport: () -> Unit, openLogin:
 
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(Unit) { vm.navigate.collect { openDeck(it) } }
+    LaunchedEffect(session.hasAccount) { vm.autoSync() }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (user.isBlank()) "Mis mazos" else "Mis mazos · @$user") },
+                title = { Text(t.myDecks) },
                 actions = {
-                    IconButton(onClick = { vm.syncFromMoxfield() }) { Icon(Icons.Outlined.Sync, "Traer mis mazos de Moxfield") }
+                    if (session.hasAccount) {
+                        IconButton(onClick = { vm.syncFromMoxfield() }) { Icon(Icons.Outlined.Sync, t.syncMyDecks) }
+                    }
+                    IconButton(onClick = openAccount) {
+                        if (session.userName.isNotBlank()) {
+                            Box(
+                                Modifier.size(30.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(session.userName.take(1).uppercase(), color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                        } else {
+                            Icon(Icons.Outlined.AccountCircle, t.account)
+                        }
+                    }
                 },
             )
         },
         floatingActionButton = {
             Box {
-                FloatingActionButton(onClick = { menu = true }) { Icon(Icons.Outlined.Add, "Añadir") }
+                FloatingActionButton(onClick = { menu = true }) { Icon(Icons.Outlined.Add, t.add) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(
-                        text = { Text("Nuevo mazo") },
+                        text = { Text(t.newDeck) },
                         leadingIcon = { Icon(Icons.Outlined.NoteAdd, null) },
                         onClick = { menu = false; dialog = "new" },
                     )
                     DropdownMenuItem(
-                        text = { Text("Importar lista de texto") },
+                        text = { Text(t.importTextList) },
                         leadingIcon = { Icon(Icons.Outlined.ContentPaste, null) },
                         onClick = { menu = false; openImport() },
                     )
                     DropdownMenuItem(
-                        text = { Text("Abrir enlace de Moxfield") },
+                        text = { Text(t.openMoxfieldLink) },
                         leadingIcon = { Icon(Icons.Outlined.Link, null) },
                         onClick = { menu = false; dialog = "link" },
                     )
@@ -156,23 +192,33 @@ fun MyDecksScreen(openDeck: (String) -> Unit, openImport: () -> Unit, openLogin:
             onRefresh = { vm.syncFromMoxfield() },
             modifier = Modifier.padding(padding).fillMaxSize(),
         ) {
-            if (mine.isEmpty() && recent.isEmpty()) {
-                MessageBox(
-                    text = "Aún no hay mazos en el móvil.\nInicia sesión para traer los tuyos, busca mazos o abre un enlace de Moxfield.",
-                    isError = false,
-                    actionLabel = "Iniciar sesión en Moxfield",
-                    onAction = openLogin,
-                )
-            } else {
-                LazyColumn(Modifier.fillMaxSize()) {
-                    if (mine.isNotEmpty()) {
-                        item { SectionHeader("En el móvil y tuyos", "${mine.size}") }
-                        items(mine, key = { "m" + it.publicId }) { DeckRow(it.toRow()) { openDeck(it.publicId) } }
+            LazyColumn(Modifier.fillMaxSize()) {
+                if (session.needsLogin) {
+                    item {
+                        MessageBox(
+                            text = t.sessionClosedByMoxfield,
+                            actionLabel = t.loginAgain,
+                            onAction = openLogin,
+                        )
                     }
-                    if (recent.isNotEmpty()) {
-                        item { SectionHeader("Vistos recientemente") }
-                        items(recent, key = { "r" + it.publicId }) { DeckRow(it.toRow()) { openDeck(it.publicId) } }
+                }
+                if (mine.isEmpty() && recent.isEmpty()) {
+                    item {
+                        MessageBox(
+                            text = if (session.hasAccount) t.noDecksYetLoggedIn else t.noDecksYet,
+                            isError = false,
+                            actionLabel = if (session.hasAccount || session.needsLogin) null else t.loginWithMoxfield,
+                            onAction = if (session.hasAccount || session.needsLogin) null else openLogin,
+                        )
                     }
+                }
+                if (mine.isNotEmpty()) {
+                    item { SectionHeader(if (session.hasAccount) t.yoursAndSaved else t.savedOnPhone, "${mine.size}") }
+                    items(mine, key = { "m" + it.publicId }) { DeckRow(it.toRow()) { openDeck(it.publicId) } }
+                }
+                if (recent.isNotEmpty()) {
+                    item { SectionHeader(t.recentlyViewed) }
+                    items(recent, key = { "r" + it.publicId }) { DeckRow(it.toRow()) { openDeck(it.publicId) } }
                 }
             }
         }
@@ -180,14 +226,14 @@ fun MyDecksScreen(openDeck: (String) -> Unit, openImport: () -> Unit, openLogin:
 
     when (dialog) {
         "link" -> TextInputDialog(
-            title = "Abrir mazo de Moxfield",
-            label = "Enlace o id del mazo",
+            title = t.openMoxfieldDeck,
+            label = t.deckLinkOrId,
             onDismiss = { dialog = null },
             onConfirm = { dialog = null; vm.openByLink(it) },
         )
         "new" -> NewDeckDialog(
             onDismiss = { dialog = null },
-            onConfirm = { name, format -> dialog = null; vm.createDeck(name, format) },
+            onConfirm = { name, format, visibility -> dialog = null; vm.createDeck(name, format, visibility) },
         )
     }
 }
@@ -197,44 +243,47 @@ fun TextInputDialog(
     title: String,
     label: String,
     initial: String = "",
-    confirmLabel: String = "Aceptar",
+    confirmLabel: String? = null,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
 ) {
+    val t = LocalStrings.current
     var text by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text(label) }, singleLine = true) },
-        confirmButton = { TextButton(onClick = { onConfirm(text) }, enabled = text.isNotBlank()) { Text(confirmLabel) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+        confirmButton = { TextButton(onClick = { onConfirm(text) }, enabled = text.isNotBlank()) { Text(confirmLabel ?: t.accept) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t.cancel) } },
     )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewDeckDialog(
-    title: String = "Nuevo mazo",
+    title: String? = null,
     initialName: String = "",
     initialFormat: String = "commander",
     onDismiss: () -> Unit,
-    onConfirm: (name: String, format: String) -> Unit,
+    onConfirm: (name: String, format: String, visibility: String) -> Unit,
 ) {
+    val t = LocalStrings.current
     var name by remember { mutableStateOf(initialName) }
     var format by remember { mutableStateOf(initialFormat) }
+    var visibility by remember { mutableStateOf("public") }
     var expanded by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        title = { Text(title ?: t.newDeck) },
         text = {
             Column {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre") }, singleLine = true)
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(t.name) }, singleLine = true)
                 ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }, modifier = Modifier.padding(top = 8.dp)) {
                     OutlinedTextField(
                         value = format,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Formato") },
+                        label = { Text(t.format) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
                         modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
                     )
@@ -244,9 +293,15 @@ fun NewDeckDialog(
                         }
                     }
                 }
+                Text(t.visibility, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    VISIBILITIES.forEach { v ->
+                        FilterChip(selected = visibility == v, onClick = { visibility = v }, label = { Text(t.visibilityLabel(v)) })
+                    }
+                }
             }
         },
-        confirmButton = { TextButton(onClick = { onConfirm(name, format) }, enabled = name.isNotBlank()) { Text("Crear") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+        confirmButton = { TextButton(onClick = { onConfirm(name, format, visibility) }, enabled = name.isNotBlank()) { Text(t.create) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t.cancel) } },
     )
 }

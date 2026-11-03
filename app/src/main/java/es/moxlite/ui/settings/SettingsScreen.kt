@@ -2,12 +2,14 @@ package es.moxlite.ui.settings
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,12 +17,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,6 +37,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,38 +49,44 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import es.moxlite.BuildConfig
-import es.moxlite.data.remote.Http
+import es.moxlite.data.settings.CardLanguages
+import es.moxlite.data.settings.ProxySettings
+import es.moxlite.data.settings.ProxyType
 import es.moxlite.data.update.UpdateNotifications
 import es.moxlite.data.update.UpdateState
-import es.moxlite.data.sync.DeckOp
-import es.moxlite.data.sync.SyncWorker
-import es.moxlite.data.sync.describe
+import es.moxlite.i18n.AppLanguage
+import es.moxlite.ui.account.AccountRow
+import es.moxlite.ui.common.LocalStrings
 import es.moxlite.ui.common.SectionHeader
 import es.moxlite.ui.common.appContainer
 import es.moxlite.ui.web.WebMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.DateFormat
-import java.util.Date
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openDeck: (String) -> Unit) {
+fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openAccount: () -> Unit) {
     val container = appContainer()
+    val t = LocalStrings.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val session by container.session.state.collectAsStateWithLifecycle()
-    val pending by container.deckRepository.observePendingOps().collectAsStateWithLifecycle(emptyList())
-    var userName by remember(session.userName) { mutableStateOf(session.userName) }
+    val settings = container.settings
+    val appLanguage by settings.appLanguage.collectAsStateWithLifecycle()
+    val cardLanguage by settings.cardLanguage.collectAsStateWithLifecycle()
+    val autoSaveMine by settings.autoSaveMine.collectAsStateWithLifecycle()
+    val proxy by settings.proxy.collectAsStateWithLifecycle()
     var cacheBytes by remember { mutableLongStateOf(container.imageLoader.diskCache?.size ?: 0L) }
     val update by container.updater.state.collectAsStateWithLifecycle()
     val notifyUpdates by container.updater.backgroundEnabled.collectAsStateWithLifecycle()
     var canNotify by remember { mutableStateOf(UpdateNotifications.canNotify(context)) }
+    var cardLanguageMenu by remember { mutableStateOf(false) }
+    var proxyDialog by remember { mutableStateOf(false) }
     LifecycleResumeEffect(Unit) {
         canNotify = UpdateNotifications.canNotify(context)
         onPauseOrDispose { }
@@ -97,91 +110,99 @@ fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openDeck:
         }
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Ajustes") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(t.settings) }) }) { padding ->
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
-            item { SectionHeader("Cuenta de Moxfield") }
+            item { SectionHeader(t.account) }
+            item { AccountRow(onClick = openAccount) }
+
+            item { SectionHeader(t.languages) }
             item {
-                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val status = when {
-                        session.isLoggedIn -> "Sesión activa" + (session.expiresAt?.let {
-                            " hasta " + DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(it))
-                        } ?: "")
-                        session.accessToken != null || session.isExpired -> "Sesión caducada"
-                        else -> "Sin sesión (solo mazos públicos)"
+                Column(Modifier.padding(horizontal = 16.dp)) {
+                    Text(t.appLanguage, style = MaterialTheme.typography.bodyLarge)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        AppLanguage.entries.forEach { lang ->
+                            FilterChip(
+                                selected = appLanguage == lang,
+                                onClick = { settings.setAppLanguage(lang) },
+                                label = { Text(t.appLanguageLabel(lang)) },
+                            )
+                        }
                     }
-                    Text(status, style = MaterialTheme.typography.bodyMedium)
-                    OutlinedTextField(
-                        value = userName,
-                        onValueChange = { userName = it },
-                        label = { Text("Tu usuario de Moxfield") },
-                        supportingText = { Text("Se usa para listar tus mazos públicos en \"Mis mazos\"") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                }
+            }
+            item {
+                Box {
+                    ListItem(
+                        headlineContent = { Text(t.cardLanguage) },
+                        supportingContent = { Text(t.cardLanguageName(cardLanguage) + " · " + t.cardLanguageHint) },
+                        modifier = Modifier.clickable { cardLanguageMenu = true },
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { container.session.setUserName(userName) }, enabled = userName != session.userName) {
-                            Text("Guardar usuario")
+                    DropdownMenu(expanded = cardLanguageMenu, onDismissRequest = { cardLanguageMenu = false }) {
+                        CardLanguages.all.forEach { code ->
+                            DropdownMenuItem(
+                                text = { Text(t.cardLanguageName(code)) },
+                                onClick = { settings.setCardLanguage(code); cardLanguageMenu = false },
+                            )
                         }
-                        Button(onClick = { openWeb(WebMode.LOGIN) }) {
-                            Text(if (session.isLoggedIn) "Renovar sesión" else "Iniciar sesión")
-                        }
-                    }
-                    if (session.accessToken != null) {
-                        OutlinedButton(onClick = { container.session.logout() }) { Text("Cerrar sesión y borrar cookies") }
                     }
                 }
             }
 
-            item { SectionHeader("Moxfield web") }
+            item { SectionHeader(t.offlineAndConnection) }
             item {
                 ListItem(
-                    headlineContent = { Text("Abrir Moxfield dentro de la app") },
-                    supportingContent = { Text("Para pasar la verificación de Cloudflare o usar funciones que la app aún no tiene") },
+                    headlineContent = { Text(t.autoSaveMine) },
+                    supportingContent = { Text(t.autoSaveMineHint) },
+                    trailingContent = { Switch(checked = autoSaveMine, onCheckedChange = settings::setAutoSaveMine) },
+                    modifier = Modifier.clickable { settings.setAutoSaveMine(!autoSaveMine) },
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text(t.proxy) },
+                    supportingContent = {
+                        Text(if (proxy.isUsable) "${proxy.type.name} ${proxy.host}:${proxy.port}" else t.proxyHint)
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = proxy.enabled,
+                            onCheckedChange = { on ->
+                                if (on && proxy.host.isBlank()) proxyDialog = true
+                                else settings.setProxy(proxy.copy(enabled = on))
+                            },
+                        )
+                    },
+                    modifier = Modifier.clickable { proxyDialog = true },
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text(t.openLinksWithApp) },
+                    supportingContent = { Text(t.openLinksWithAppHint) },
+                    modifier = Modifier.clickable { openLinkSettings(context) },
+                )
+            }
+
+            item { SectionHeader(t.moxfieldWeb) }
+            item {
+                ListItem(
+                    headlineContent = { Text(t.openMoxfieldInApp) },
+                    supportingContent = { Text(t.openMoxfieldInAppHint) },
                     modifier = Modifier.clickable { openWeb(WebMode.BROWSE) },
                 )
             }
             item {
                 ListItem(
-                    headlineContent = { Text("Registro de API") },
-                    supportingContent = { Text("Llamadas que hace la web: sirve para descubrir los endpoints de escritura") },
+                    headlineContent = { Text(t.apiLog) },
+                    supportingContent = { Text(t.apiLogHint) },
                     modifier = Modifier.clickable(onClick = openApiLog),
                 )
             }
 
-            item {
-                SectionHeader("Cambios pendientes de subir", "${pending.size}")
-            }
-            if (pending.isEmpty()) {
-                item { Text("No hay cambios pendientes.", modifier = Modifier.padding(horizontal = 16.dp)) }
-            } else {
-                item {
-                    Text(
-                        if (container.deckRepository.canWriteRemote) "Se suben automáticamente con conexión."
-                        else "La subida a Moxfield aún no está implementada: los cambios se conservan en el móvil y puedes exportar el mazo como texto.",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                }
-                items(pending, key = { it.id }) { op ->
-                    val text = runCatching { Http.json.decodeFromString(DeckOp.serializer(), op.payload).describe() }
-                        .getOrDefault(op.type)
-                    ListItem(
-                        headlineContent = { Text(text) },
-                        supportingContent = { Text(op.deckId + (op.lastError?.let { " · error: $it" } ?: "")) },
-                        modifier = Modifier.clickable { openDeck(op.deckId) },
-                    )
-                }
-                item {
-                    OutlinedButton(onClick = { SyncWorker.runNow(context) }, modifier = Modifier.padding(horizontal = 16.dp)) {
-                        Text("Sincronizar ahora")
-                    }
-                }
-            }
-
-            item { SectionHeader("Almacenamiento") }
+            item { SectionHeader(t.storage) }
             item {
                 ListItem(
-                    headlineContent = { Text("Imágenes de cartas guardadas") },
+                    headlineContent = { Text(t.savedImages) },
                     supportingContent = { Text("%.1f MB".format(cacheBytes / 1_048_576.0)) },
                     trailingContent = {
                         IconButton(onClick = {
@@ -189,24 +210,24 @@ fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openDeck:
                                 withContext(Dispatchers.IO) { container.imageLoader.diskCache?.clear() }
                                 cacheBytes = 0
                             }
-                        }) { Icon(Icons.Outlined.Delete, "Vaciar") }
+                        }) { Icon(Icons.Outlined.Delete, t.clear) }
                     },
                 )
             }
 
-            item { SectionHeader("Acerca de") }
+            item { SectionHeader(t.about) }
             item {
                 val status = when (val u = update) {
-                    UpdateState.Checking -> "Buscando actualizaciones…"
-                    UpdateState.UpToDate -> "Tienes la última versión"
-                    is UpdateState.Available -> "Versión ${u.info.version} disponible: toca para actualizar"
-                    is UpdateState.Downloading -> "Descargando ${u.info.version}…"
-                    is UpdateState.ReadyToInstall -> "Versión ${u.info.version} descargada: toca para instalar"
+                    UpdateState.Checking -> t.updChecking
+                    UpdateState.UpToDate -> t.updUpToDate
+                    is UpdateState.Available -> t.updAvailable(u.info.version)
+                    is UpdateState.Downloading -> t.updDownloadingVersion(u.info.version)
+                    is UpdateState.ReadyToInstall -> t.updReady(u.info.version)
                     is UpdateState.Failed -> u.message
-                    UpdateState.Idle -> "Toca para buscar actualizaciones"
+                    UpdateState.Idle -> t.updTapToCheck
                 }
                 ListItem(
-                    headlineContent = { Text("Versión ${BuildConfig.VERSION_NAME}") },
+                    headlineContent = { Text(t.version(BuildConfig.VERSION_NAME)) },
                     supportingContent = { Text(status) },
                     modifier = Modifier.clickable(enabled = update !is UpdateState.Checking) {
                         when (update) {
@@ -219,13 +240,13 @@ fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openDeck:
             }
             item {
                 ListItem(
-                    headlineContent = { Text("Avisar de versiones nuevas") },
+                    headlineContent = { Text(t.notifyUpdates) },
                     supportingContent = {
                         Text(
                             when {
-                                !notifyUpdates -> "Solo se comprueba al abrir la app"
-                                !canNotify -> "Las notificaciones de Moxlite están bloqueadas: toca para permitirlas"
-                                else -> "Notificación aunque la app esté cerrada (cada 12 h)"
+                                !notifyUpdates -> t.notifyUpdatesOff
+                                !canNotify -> t.notifyUpdatesBlocked
+                                else -> t.notifyUpdatesOn
                             }
                         )
                     },
@@ -246,20 +267,79 @@ fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openDeck:
             }
             item {
                 Text(
-                    "Cliente no oficial. Usa la API interna de Moxfield (puede cambiar sin aviso) y las imágenes y datos de cartas de Scryfall. " +
-                        "Sin relación con Moxfield, Scryfall ni Wizards of the Coast.",
+                    t.disclaimer,
                     style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.padding(16.dp),
                 )
             }
         }
     }
+
+    if (proxyDialog) {
+        ProxyDialog(
+            initial = proxy,
+            onDismiss = { proxyDialog = false },
+            onSave = { settings.setProxy(it); proxyDialog = false },
+        )
+    }
+}
+
+/** Android 12+: los enlaces https sin verificar no abren la app hasta activarlo a mano. */
+private fun openLinkSettings(context: android.content.Context) {
+    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        Intent(Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS, Uri.parse("package:${context.packageName}"))
+    } else {
+        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+    }
+    runCatching { context.startActivity(intent) }
+}
+
+@Composable
+private fun ProxyDialog(initial: ProxySettings, onDismiss: () -> Unit, onSave: (ProxySettings) -> Unit) {
+    val t = LocalStrings.current
+    var type by remember { mutableStateOf(initial.type) }
+    var host by remember { mutableStateOf(initial.host) }
+    var port by remember { mutableStateOf(if (initial.port > 0) initial.port.toString() else "") }
+    val portNumber = port.toIntOrNull()
+    val valid = host.isNotBlank() && portNumber != null && portNumber in 1..65535
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t.proxy) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(t.proxyExplanation, style = MaterialTheme.typography.bodySmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ProxyType.entries.forEach { pt ->
+                        FilterChip(selected = type == pt, onClick = { type = pt }, label = { Text(pt.name) })
+                    }
+                }
+                OutlinedTextField(value = host, onValueChange = { host = it.trim() }, label = { Text(t.proxyHost) }, singleLine = true)
+                OutlinedTextField(
+                    value = port,
+                    onValueChange = { port = it.filter(Char::isDigit).take(5) },
+                    label = { Text(t.proxyPort) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = valid, onClick = { onSave(ProxySettings(true, type, host, portNumber ?: 0)) }) { Text(t.saveAndEnable) }
+        },
+        dismissButton = {
+            Row {
+                if (initial.enabled) TextButton(onClick = { onSave(initial.copy(enabled = false)) }) { Text(t.disable) }
+                TextButton(onClick = onDismiss) { Text(t.cancel) }
+            }
+        },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ApiLogScreen(onBack: () -> Unit) {
     val container = appContainer()
+    val t = LocalStrings.current
     val context = LocalContext.current
     val calls by container.apiLog.calls.collectAsStateWithLifecycle()
     var onlyWrites by remember { mutableStateOf(true) }
@@ -268,18 +348,18 @@ fun ApiLogScreen(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Registro de API") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Atrás") } },
+                title = { Text(t.apiLog) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, t.back) } },
                 actions = {
                     IconButton(onClick = {
                         context.startActivity(
                             Intent.createChooser(
                                 Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, container.apiLog.export()),
-                                "Compartir registro",
+                                t.shareLog,
                             )
                         )
-                    }) { Icon(Icons.Outlined.Share, "Compartir") }
-                    IconButton(onClick = { container.apiLog.clear() }) { Icon(Icons.Outlined.Delete, "Vaciar") }
+                    }) { Icon(Icons.Outlined.Share, t.share) }
+                    IconButton(onClick = { container.apiLog.clear() }) { Icon(Icons.Outlined.Delete, t.clear) }
                 },
             )
         },
@@ -287,15 +367,10 @@ fun ApiLogScreen(onBack: () -> Unit) {
         LazyColumn(Modifier.padding(padding).fillMaxSize()) {
             item {
                 Column(Modifier.padding(16.dp)) {
-                    Text(
-                        "1. Abre Moxfield web desde Ajustes con la sesión iniciada.\n" +
-                            "2. Haz una vez cada acción: crear mazo, añadir carta, cambiar cantidad, mover a banquillo, borrar carta, renombrar, copiar un mazo, borrarlo.\n" +
-                            "3. Vuelve aquí y comparte el registro. No incluye tokens ni contraseñas.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Text(t.apiLogInstructions, style = MaterialTheme.typography.bodySmall)
                     Row(Modifier.padding(top = 8.dp)) {
                         OutlinedButton(onClick = { onlyWrites = !onlyWrites }) {
-                            Text(if (onlyWrites) "Mostrar también lecturas (GET)" else "Solo escrituras")
+                            Text(if (onlyWrites) t.showReadsToo else t.onlyWrites)
                         }
                     }
                 }

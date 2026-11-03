@@ -6,6 +6,8 @@ import es.moxlite.AppContainer
 import es.moxlite.MoxliteApp
 import es.moxlite.data.local.DeckEntity
 import es.moxlite.data.remote.moxfield.MoxDeckSummaryDto
+import es.moxlite.data.remote.moxfield.MoxfieldImages
+import es.moxlite.data.remote.scryfall.ScryfallImages
 import es.moxlite.data.repo.DeckMapper
 
 fun DeckEntity.toRow() = DeckRowData(
@@ -14,13 +16,19 @@ fun DeckEntity.toRow() = DeckRowData(
     format = format,
     author = authorUserName,
     colors = colorIdentity,
-    featuredScryfallId = featuredScryfallId,
+    imageUrl = featuredImageUrl(),
     likes = likeCount,
     cards = mainboardCount,
     saved = isSaved,
     localOnly = isLocalOnly,
     localChanges = hasLocalChanges,
+    isPrivate = visibility == "private",
 )
+
+/** Recorte del arte de la carta destacada: Scryfall si se conoce su id; si no, el de Moxfield. */
+fun DeckEntity.featuredImageUrl(): String? =
+    featuredScryfallId?.let { ScryfallImages.url(it, ScryfallImages.Size.ART_CROP) }
+        ?: featuredMoxCardId?.let(MoxfieldImages::artCrop)
 
 fun MoxDeckSummaryDto.toRow() = DeckRowData(
     publicId = publicId,
@@ -28,8 +36,10 @@ fun MoxDeckSummaryDto.toRow() = DeckRowData(
     format = format,
     author = (createdByUser ?: authors.firstOrNull())?.userName.orEmpty(),
     colors = DeckMapper.colors(colorIdentity),
+    imageUrl = mainCardId?.let(MoxfieldImages::artCrop),
     likes = likeCount,
     cards = mainboardCount,
+    isPrivate = visibility == "private",
 )
 
 @Composable

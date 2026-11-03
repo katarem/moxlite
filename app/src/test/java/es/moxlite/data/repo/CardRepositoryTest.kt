@@ -27,6 +27,10 @@ class CardRepositoryTest {
     ) : ScryfallService {
         val collectionCalls = mutableListOf<ScryCollectionRequest>()
         val autocompleteCalls = mutableListOf<String>()
+        val advancedCalls = mutableListOf<Map<String, String>>()
+
+        /** Respuesta de searchAdvanced (por defecto, todo el catálogo). */
+        var advancedResult: (Map<String, String>) -> List<ScryCard> = { catalog }
 
         override suspend fun autocomplete(q: String): ScryNames {
             autocompleteCalls += q
@@ -37,6 +41,15 @@ class CardRepositoryTest {
             searchError?.let { throw HttpException(Response.error<Any>(it, "{}".toResponseBody())) }
             return ScryList(catalog.filter { it.name.contains(q, ignoreCase = true) })
         }
+
+        override suspend fun searchAdvanced(params: Map<String, String>): ScryList<ScryCard> {
+            advancedCalls += params
+            searchError?.let { throw HttpException(Response.error<Any>(it, "{}".toResponseBody())) }
+            return ScryList(advancedResult(params))
+        }
+
+        override suspend fun printing(set: String, number: String): ScryCard =
+            catalog.first { it.set == set && it.collectorNumber == number && it.lang == "en" }
 
         override suspend fun named(exact: String): ScryCard = catalog.first { it.name == exact }
         override suspend fun byId(id: String): ScryCard = catalog.first { it.id == id }
@@ -134,5 +147,76 @@ class CardRepositoryTest {
         val result = CardRepository(api).resolve(lines)
         assertEquals(listOf(75, 75, 10), api.collectionCalls.map { it.identifiers.size })
         assertEquals(160, result.size)
+    }
+
+    @Test
+    fun `buscar en cualquier idioma pide cartas multilingues y no busca con menos de dos letras`() = runTest {
+        val rayo = ScryCard(id = "es1", name = "Lightning Bolt", printedName = "Rayo", lang = "es", set = "m10", collectorNumber = "146")
+        val api = FakeScryfall(listOf(rayo))
+        val repo = CardRepository(api)
+
+        assertTrue(repo.searchAnyLanguage("r").isEmpty())
+        assertTrue(api.advancedCalls.isEmpty())
+
+        val found = repo.searchAnyLanguage(" rayo ")
+        assertEquals(listOf(rayo), found)
+        val params = api.advancedCalls.single()
+        assertEquals("rayo", params["q"])
+        assertEquals("true", params["include_multilingual"])
+        assertEquals("Rayo", found.single().displayName)
+    }
+
+    @Test
+    fun `buscar en cualquier idioma sin resultados (404) devuelve lista vacia`() = runTest {
+        assertTrue(CardRepository(FakeScryfall(searchError = 404)).searchAnyLanguage("nada").isEmpty())
+    }
+
+    @Test
+    fun `printings pide todas las impresiones por nombre exacto`() = runTest {
+        val api = FakeScryfall(listOf(bolt2x2, boltM10))
+        CardRepository(api).printings("Lightning Bolt")
+        val params = api.advancedCalls.single()
+        assertEquals("!\"Lightning Bolt\"", params["q"])
+        assertEquals("prints", params["unique"])
+    }
+
+    @Test
+    fun `englishPrinting cambia una carta en otro idioma por la inglesa de la misma edicion`() = runTest {
+        val rayo = ScryCard(id = "es1", name = "Lightning Bolt", printedName = "Rayo", lang = "es", set = "m10", collectorNumber = "146")
+        val repo = CardRepository(FakeScryfall(listOf(bolt2x2, boltM10, rayo)))
+        assertSame(boltM10, repo.englishPrinting(rayo))
+        assertSame(bolt2x2, repo.englishPrinting(bolt2x2))
+    }
+
+    @Test
+    fun `localize busca por lotes en el idioma pedido y marca las que no existen`() = runTest {
+        val rayoM10 = ScryCard(id = "es1", name = "Lightning Bolt", printedName = "Rayo", lang = "es", set = "m10", collectorNumber = "146")
+        val api = FakeScryfall().apply { advancedResult = { listOf(rayoM10) } }
+        val repo = CardRepository(api)
+        val keys = (1..20).map { PrintingKey("set$it", "$it") } + PrintingKey("m10", "146")
+
+        val result = repo.localize(keys, "es")
+
+        assertEquals(2, api.advancedCalls.size) // 21 claves en lotes de 15
+        assertTrue(api.advancedCalls.first()["q"]!!.startsWith("lang:es ("))
+        assertTrue(api.advancedCalls.first()["q"]!!.contains("(set:set1 cn:\"1\")"))
+        assertEquals(rayoM10, result[PrintingKey("m10", "146")])
+        assertNull(result[PrintingKey("set1", "1")])
+        assertEquals(21, result.size)
+    }
+
+    @Test
+    fun `localize en ingles no hace nada`() = runTest {
+        val api = FakeScryfall()
+        assertTrue(CardRepository(api).localize(listOf(PrintingKey("m10", "146")), "en").isEmpty())
+        assertTrue(api.advancedCalls.isEmpty())
+    }
+
+    @Test
+    fun `PrintingKey normaliza la edicion y descarta claves incompletas`() {
+        assertEquals(PrintingKey("m10", "146"), PrintingKey.of("M10", "146"))
+        assertNull(PrintingKey.of("", "146"))
+        assertNull(PrintingKey.of("m10", null))
+        assertNull(PrintingKey.of("m10", ""))
     }
 }

@@ -1,10 +1,7 @@
 package es.moxlite.data.sync
 
-import es.moxlite.data.local.DeckEntity
 import es.moxlite.data.remote.Http
-import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -17,6 +14,7 @@ class DeckOpTest {
         DeckOp.SetQuantity("sideboard", "u2", "Duress", null, null, 0),
         DeckOp.MoveCard("mainboard", "sideboard", "u3", "Negate", 2),
         DeckOp.Rename("Otro nombre"),
+        DeckOp.ChangePrinting("mainboard", "u4", "Sol Ring", "old", "sfOld", "sfNew", "c21", "263"),
     )
 
     @Test
@@ -30,7 +28,7 @@ class DeckOpTest {
 
     @Test
     fun `typeName coincide con el SerialName`() {
-        assertEquals(listOf("create", "create", "set_qty", "set_qty", "move", "rename"), all.map { it.typeName })
+        assertEquals(listOf("create", "create", "set_qty", "set_qty", "move", "rename", "printing"), all.map { it.typeName })
     }
 
     @Test
@@ -41,22 +39,21 @@ class DeckOpTest {
                 "Crear copia \"Copia\"",
                 "Island × 4",
                 "Quitar Duress",
-                "Mover Negate a sideboard",
+                "Mover Negate a Banquillo",
                 "Renombrar a \"Otro nombre\"",
+                "Arte de Sol Ring: C21 263",
             ),
             all.map { it.describe() },
         )
     }
 
     @Test
-    fun `el escritor provisional no sube nada`() = runTest {
-        val writer = PendingDiscoveryWriter()
-        assertFalse(writer.isAvailable)
-        assertEquals(WriteResult.NotSupported, writer.apply(DeckEntity(publicId = "x", name = "x"), all.first()))
-    }
-
-    @Test
-    fun `notSupported explica que se guarda en local`() {
-        assertTrue(notSupported("Renombrar").message!!.startsWith("Renombrar todavía no está implementado"))
+    fun `lee colas guardadas por versiones anteriores (sin campos nuevos)`() {
+        val old = """{"type":"set_qty","board":"mainboard","cardKey":"u1","name":"Island","scryfallId":null,"moxCardId":"mx","quantity":3}"""
+        val op = Http.json.decodeFromString(DeckOp.serializer(), old) as DeckOp.SetQuantity
+        assertEquals(3, op.quantity)
+        assertEquals(null, op.setCode)
+        val create = Http.json.decodeFromString(DeckOp.serializer(), """{"type":"create","name":"N","format":"modern"}""") as DeckOp.CreateDeck
+        assertEquals("public", create.visibility)
     }
 }

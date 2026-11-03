@@ -8,13 +8,19 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.mutableStateOf
 import es.moxlite.data.remote.moxfield.MoxfieldIds
 import es.moxlite.data.update.UpdateNotifications
+import es.moxlite.domain.DeckSnapshot
+import es.moxlite.domain.ShareLink
 import es.moxlite.ui.AppNav
+import es.moxlite.ui.common.ProvideStrings
 import es.moxlite.ui.theme.MoxliteTheme
 
 /** Lo que llega desde fuera: un enlace de mazo o un texto compartido para importar. */
 sealed interface IncomingLink {
     data class Deck(val publicId: String) : IncomingLink
     data class ImportText(val text: String) : IncomingLink
+
+    /** Enlace compartido desde Moxlite: lleva una copia del mazo. */
+    data class Shared(val snapshot: DeckSnapshot) : IncomingLink
 }
 
 class MainActivity : ComponentActivity() {
@@ -28,10 +34,12 @@ class MainActivity : ComponentActivity() {
         handleUpdateNotification(intent)
         setContent {
             MoxliteTheme {
-                AppNav(
-                    incoming = incoming.value,
-                    onIncomingHandled = { incoming.value = null },
-                )
+                ProvideStrings {
+                    AppNav(
+                        incoming = incoming.value,
+                        onIncomingHandled = { incoming.value = null },
+                    )
+                }
             }
         }
     }
@@ -52,11 +60,16 @@ class MainActivity : ComponentActivity() {
     private fun parse(intent: Intent?): IncomingLink? {
         intent ?: return null
         return when (intent.action) {
-            Intent.ACTION_VIEW -> intent.dataString?.let(MoxfieldIds::parsePublicId)?.let(IncomingLink::Deck)
+            Intent.ACTION_VIEW -> {
+                val url = intent.dataString ?: return null
+                ShareLink.parse(url)?.let(IncomingLink::Shared)
+                    ?: MoxfieldIds.parsePublicId(url)?.let(IncomingLink::Deck)
+            }
             Intent.ACTION_SEND -> {
                 val text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
-                if (text.contains("moxfield.com/decks/")) MoxfieldIds.parsePublicId(text)?.let(IncomingLink::Deck)
-                else text.takeIf { it.isNotBlank() }?.let(IncomingLink::ImportText)
+                ShareLink.parse(text)?.let(IncomingLink::Shared)
+                    ?: if (text.contains("moxfield.com/decks/")) MoxfieldIds.parsePublicId(text)?.let(IncomingLink::Deck)
+                    else text.takeIf { it.isNotBlank() }?.let(IncomingLink::ImportText)
             }
             else -> null
         }

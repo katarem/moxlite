@@ -1,5 +1,6 @@
 package es.moxlite.ui.users
 
+import es.moxlite.ui.common.LocalStrings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -87,38 +88,39 @@ class UsersViewModel(private val repo: DeckRepository) : ViewModel() {
 @Composable
 fun UsersScreen(openUser: (String) -> Unit) {
     val container = appContainer()
+    val t = LocalStrings.current
     val vm: UsersViewModel = viewModel { UsersViewModel(container.deckRepository) }
     val followed by vm.followed.collectAsStateWithLifecycle()
     val results by vm.results.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     var text by remember { mutableStateOf("") }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Usuarios") }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text(t.users) }) }) { padding ->
         Column(Modifier.padding(padding)) {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it; if (it.length >= 2) vm.search(it) },
-                placeholder = { Text("Buscar usuario de Moxfield") },
+                placeholder = { Text(t.searchUserPlaceholder) },
                 leadingIcon = { Icon(Icons.Outlined.Search, null) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = {
                     if (text.isNotBlank()) openUser(text.trim())
                 }),
-                supportingText = { Text("Pulsa buscar en el teclado para ir directamente a ese usuario") },
+                supportingText = { Text(t.searchUserHint) },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
             error?.let { MessageBox(it) }
             LazyColumn(Modifier.fillMaxSize()) {
                 if (followed.isNotEmpty() && text.isBlank()) {
-                    item { SectionHeader("Seguidos") }
+                    item { SectionHeader(t.following) }
                     items(followed, key = { "f" + it.userName }) { u ->
                         ListItem(
                             headlineContent = { Text(u.displayName.ifBlank { u.userName }) },
                             supportingContent = { Text("@${u.userName}") },
                             leadingContent = { Icon(Icons.Outlined.Person, null) },
                             trailingContent = {
-                                IconButton(onClick = { vm.unfollow(u.userName) }) { Icon(Icons.Outlined.PersonRemove, "Dejar de seguir") }
+                                IconButton(onClick = { vm.unfollow(u.userName) }) { Icon(Icons.Outlined.PersonRemove, t.unfollow) }
                             },
                             modifier = Modifier.clickable { openUser(u.userName) },
                         )
@@ -133,7 +135,7 @@ fun UsersScreen(openUser: (String) -> Unit) {
                             leadingContent = { Avatar(u.profileImageUrl) },
                             trailingContent = {
                                 IconButton(onClick = { if (isFollowed) vm.unfollow(u.userName) else vm.follow(u) }) {
-                                    Icon(if (isFollowed) Icons.Outlined.PersonRemove else Icons.Outlined.PersonAdd, "Seguir")
+                                    Icon(if (isFollowed) Icons.Outlined.PersonRemove else Icons.Outlined.PersonAdd, if (isFollowed) t.unfollow else t.follow)
                                 }
                             },
                             modifier = Modifier.clickable { openUser(u.userName) },
@@ -156,6 +158,7 @@ private fun Avatar(url: String?) {
 @Composable
 fun UserDecksScreen(userName: String, onBack: () -> Unit, openDeck: (String) -> Unit) {
     val container = appContainer()
+    val t = LocalStrings.current
     val vm: DeckSearchViewModel = viewModel(key = "user-$userName") {
         DeckSearchViewModel(container.deckRepository, DeckQuery(authorUserName = userName, pageSize = 50))
     }
@@ -166,7 +169,7 @@ fun UserDecksScreen(userName: String, onBack: () -> Unit, openDeck: (String) -> 
         topBar = {
             TopAppBar(
                 title = { Text("@$userName") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Atrás") } },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, t.back) } },
             )
         },
     ) { padding ->
@@ -175,7 +178,7 @@ fun UserDecksScreen(userName: String, onBack: () -> Unit, openDeck: (String) -> 
             openDeck = openDeck,
             onLoadMore = { vm.loadMore() },
             onRetry = { vm.search() },
-            emptyText = "@$userName no tiene mazos públicos (o no existe).",
+            emptyText = t.userHasNoPublicDecks(userName),
             modifier = Modifier.padding(padding),
         )
     }

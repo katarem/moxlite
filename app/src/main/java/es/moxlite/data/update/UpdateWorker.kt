@@ -1,5 +1,6 @@
 package es.moxlite.data.update
 
+import es.moxlite.i18n.I18n
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -71,8 +72,8 @@ object UpdateNotifications {
     const val EXTRA_SHOW_UPDATE = "es.moxlite.SHOW_UPDATE"
 
     fun createChannel(context: Context) {
-        val channel = NotificationChannel(CHANNEL_ID, "Actualizaciones", NotificationManager.IMPORTANCE_DEFAULT).apply {
-            description = "Aviso cuando hay una versión nueva de Moxlite"
+        val channel = NotificationChannel(CHANNEL_ID, I18n.strings.updChannelName, NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = I18n.strings.updChannelDescription
         }
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
@@ -94,10 +95,10 @@ object UpdateNotifications {
         val pending = PendingIntent.getActivity(
             context, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val text = "Toca para ver las novedades e instalarla."
+        val text = I18n.strings.updNotificationText
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_update)
-            .setContentTitle("Moxlite ${info.version} disponible")
+            .setContentTitle(I18n.strings.updAvailableTitle(info.version))
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(if (info.notes.isBlank()) text else "$text\n\n${info.notes.take(500)}"))
             .setContentIntent(pending)

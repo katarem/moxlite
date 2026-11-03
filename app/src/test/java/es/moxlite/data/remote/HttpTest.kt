@@ -57,4 +57,15 @@ class HttpTest {
         assertEquals("yo", parsed.userName)
         assertEquals("", parsed.displayName)
     }
+
+    @Test
+    fun `distingue bloqueo de falta de conexion`() {
+        assertTrue(java.net.ConnectException("refused").looksLikeBlocking())
+        assertTrue(java.net.SocketException("Connection reset").looksLikeBlocking())
+        assertTrue(javax.net.ssl.SSLHandshakeException("handshake").looksLikeBlocking())
+        assertFalse(UnknownHostException("sin red").looksLikeBlocking())
+        assertFalse(MoxError.NotFound().looksLikeBlocking())
+        assertTrue(MoxError.Unreachable().userMessage().contains("LaLiga"))
+        assertTrue(MoxError.WriteRejected(409, "version").userMessage().contains("409"))
+    }
 }

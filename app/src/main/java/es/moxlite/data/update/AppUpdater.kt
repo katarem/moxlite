@@ -1,5 +1,6 @@
 package es.moxlite.data.update
 
+import es.moxlite.i18n.I18n
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -102,7 +103,7 @@ class AppUpdater(
             },
             onFailure = { e ->
                 // Sin conexión al abrir la app no merece un aviso; en la manual, sí.
-                _state.value = if (manual) UpdateState.Failed("No se pudo comprobar: ${e.message ?: e::class.java.simpleName}") else UpdateState.Idle
+                _state.value = if (manual) UpdateState.Failed(I18n.strings.updCheckFailed(e.message ?: e::class.java.simpleName)) else UpdateState.Idle
             },
         )
     }
@@ -182,7 +183,7 @@ class AppUpdater(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.value = UpdateState.Failed("No se pudo descargar: ${e.message ?: e::class.java.simpleName}", info)
+                _state.value = UpdateState.Failed(I18n.strings.updDownloadFailed(e.message ?: e::class.java.simpleName), info)
             }
         }
     }
@@ -203,7 +204,7 @@ class AppUpdater(
         try {
             context.startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            _state.value = UpdateState.Failed("No se encontró el instalador de Android.", info)
+            _state.value = UpdateState.Failed(I18n.strings.updNoInstaller, info)
         }
     }
 

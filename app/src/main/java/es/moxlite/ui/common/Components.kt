@@ -18,7 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.DownloadDone
-import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.CloudUpload
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.ThumbUp
@@ -38,7 +39,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import es.moxlite.data.remote.scryfall.ScryfallImages
 import es.moxlite.ui.theme.ManaColors
 
 /** Datos mínimos para pintar una fila de mazo (sirve para Room y para resultados de búsqueda). */
@@ -48,12 +48,14 @@ data class DeckRowData(
     val format: String,
     val author: String,
     val colors: String,
-    val featuredScryfallId: String? = null,
+    /** Miniatura (recorte del arte de la carta destacada). */
+    val imageUrl: String? = null,
     val likes: Int = 0,
     val cards: Int = 0,
     val saved: Boolean = false,
     val localOnly: Boolean = false,
     val localChanges: Boolean = false,
+    val isPrivate: Boolean = false,
 )
 
 @Composable
@@ -71,9 +73,9 @@ fun DeckRow(deck: DeckRowData, onClick: () -> Unit) {
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            deck.featuredScryfallId?.let {
+            deck.imageUrl?.let {
                 AsyncImage(
-                    model = ScryfallImages.url(it, ScryfallImages.Size.ART_CROP),
+                    model = it,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
@@ -96,10 +98,12 @@ fun DeckRow(deck: DeckRowData, onClick: () -> Unit) {
                 )
             }
         }
+        val t = LocalStrings.current
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (deck.localChanges) SmallIcon(Icons.Outlined.Edit, "Cambios sin subir", MaterialTheme.colorScheme.tertiary)
-            if (deck.localOnly) SmallIcon(Icons.Outlined.PhoneAndroid, "Solo en el móvil")
-            else if (deck.saved) SmallIcon(Icons.Outlined.DownloadDone, "Disponible sin conexión", MaterialTheme.colorScheme.primary)
+            if (deck.isPrivate) SmallIcon(Icons.Outlined.Lock, t.visibilityPrivate)
+            if (deck.localChanges) SmallIcon(Icons.Outlined.CloudUpload, t.pendingUpload, MaterialTheme.colorScheme.tertiary)
+            if (deck.localOnly) SmallIcon(Icons.Outlined.PhoneAndroid, t.onlyOnPhone)
+            else if (deck.saved) SmallIcon(Icons.Outlined.DownloadDone, t.availableOffline, MaterialTheme.colorScheme.primary)
             if (deck.likes > 0) {
                 SmallIcon(Icons.Outlined.ThumbUp, null)
                 Text("${deck.likes}", style = MaterialTheme.typography.labelSmall)
@@ -136,7 +140,7 @@ fun OfflineBanner(visible: Boolean) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Outlined.CloudOff, null, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(8.dp))
-            Text("Sin conexión: mostrando lo guardado en el móvil", style = MaterialTheme.typography.labelMedium)
+            Text(LocalStrings.current.offlineBanner, style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -178,3 +182,6 @@ val FORMATS = listOf(
     "commander", "standard", "pioneer", "modern", "legacy", "vintage", "pauper",
     "historic", "brawl", "oathbreaker", "paupercommander", "none",
 )
+
+/** Visibilidades de mazo de Moxfield. */
+val VISIBILITIES = listOf("public", "unlisted", "private")
