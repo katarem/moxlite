@@ -1,8 +1,8 @@
 name: Android
 
 # - Pull requests: tests unitarios + compilación debug y release.
-# - Push a main (al hacer merge): lo mismo y, si todo pasa, publica una Release de GitHub
-#   con el APK listo para descargar.
+# - Push a main (al hacer merge) o "Run workflow" sobre main: lo mismo y, si todo pasa,
+#   publica una Release de GitHub con el APK listo para descargar.
 
 on:
   pull_request:
@@ -71,12 +71,18 @@ jobs:
           name: moxlite-apk-${{ steps.version.outputs.name }}
           path: app/build/outputs/apk/**/*.apk
 
+      # En push a main y al lanzarlo a mano ("Run workflow") sobre main.
       - name: Publicar Release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="v${VERSION_NAME}"
+          # La versión sale del nº de commits: relanzarlo sobre el mismo commit no puede crear otra.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::notice::La Release $tag ya existe. Para publicar otra versión hace falta un commit nuevo en main."
+            exit 0
+          fi
           cp app/build/outputs/apk/release/app-release.apk moxlite.apk
 
           notes="Instalar: descarga \`moxlite.apk\` en el móvil y ábrelo."
