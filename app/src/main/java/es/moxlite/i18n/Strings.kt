@@ -131,6 +131,8 @@ interface Strings {
     val noLongerOffline: String
     val shareLink: String
     fun shareMessage(deckName: String, link: String): String
+    val copyCode: String
+    val codeCopied: String
     fun shareTitle(deckName: String): String
     val exportText: String
     val exportQuestion: String

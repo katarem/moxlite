@@ -34,6 +34,7 @@ sealed interface DeckEvent {
     data class Message(val text: String) : DeckEvent
     data class OpenDeck(val publicId: String) : DeckEvent
     data class Share(val text: String, val title: String) : DeckEvent
+    data class CopyCode(val code: String) : DeckEvent
     data object Closed : DeckEvent
 }
 
@@ -167,7 +168,12 @@ class DeckViewModel(private val c: AppContainer, val publicId: String) : ViewMod
         emit(DeckEvent.Share(repo.exportText(id, includePrintings), deck.value?.name ?: I18n.strings.deck))
     }
 
-    /** Enlace para que otra persona con Moxlite vea el mazo en su app (aunque Moxfield no cargue). */
+    /** Código del mazo (sin el enlace) para pegarlo en Moxlite. */
+    fun copyCode() = launchSafe {
+        emit(DeckEvent.CopyCode(ShareLink.code(repo.snapshot(id))))
+    }
+
+    /** Enlace moxlite:// para que otra persona con Moxlite vea el mazo en su app (aunque Moxfield no cargue). */
     fun shareLink() = launchSafe {
         val snapshot = repo.snapshot(id)
         val link = ShareLink.build(snapshot)

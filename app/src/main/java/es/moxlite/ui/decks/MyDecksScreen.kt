@@ -51,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -61,6 +62,8 @@ import es.moxlite.data.local.DeckEntity
 import es.moxlite.data.remote.moxfield.MoxfieldIds
 import es.moxlite.data.remote.userMessage
 import es.moxlite.domain.DeckFilters
+import es.moxlite.domain.DeckSnapshot
+import es.moxlite.domain.ShareLink
 import es.moxlite.domain.DeckSort
 import es.moxlite.i18n.I18n
 import es.moxlite.ui.common.DeckFilterBar
@@ -158,6 +161,8 @@ class MyDecksViewModel(private val c: AppContainer) : ViewModel() {
     val messages = _messages.asSharedFlow()
     private val _navigate = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val navigate = _navigate.asSharedFlow()
+    private val _shared = MutableSharedFlow<DeckSnapshot>(extraBufferCapacity = 1)
+    val shared = _shared.asSharedFlow()
     private var lastAutoSync = 0L
 
     /** Al abrir la pantalla con sesión: traer la lista de mazos (como mucho cada 10 min). */
@@ -182,7 +187,12 @@ class MyDecksViewModel(private val c: AppContainer) : ViewModel() {
         _refreshing.value = false
     }
 
+    /** Enlace o código de Moxlite (lleva el mazo dentro) o enlace/id de Moxfield. */
     fun openByLink(text: String) = viewModelScope.launch {
+        ShareLink.parse(text)?.let {
+            _shared.emit(it)
+            return@launch
+        }
         val id = MoxfieldIds.parsePublicId(text)
         if (id == null) _messages.emit(I18n.strings.notAMoxfieldLink) else _navigate.emit(id)
     }
@@ -198,7 +208,13 @@ class MyDecksViewModel(private val c: AppContainer) : ViewModel() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MyDecksScreen(openDeck: (String) -> Unit, openImport: () -> Unit, openLogin: () -> Unit, openAccount: () -> Unit) {
+fun MyDecksScreen(
+    openDeck: (String) -> Unit,
+    openShared: (DeckSnapshot) -> Unit,
+    openImport: () -> Unit,
+    openLogin: () -> Unit,
+    openAccount: () -> Unit,
+) {
     val container = appContainer()
     val t = LocalStrings.current
     val vm: MyDecksViewModel = viewModel { MyDecksViewModel(container) }
@@ -214,6 +230,8 @@ fun MyDecksScreen(openDeck: (String) -> Unit, openImport: () -> Unit, openLogin:
 
     LaunchedEffect(Unit) { vm.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(Unit) { vm.navigate.collect { openDeck(it) } }
+    LaunchedEffect(Unit) { vm.shared.collect { openShared(it) } }
+    val clipboard = LocalClipboardManager.current
     LaunchedEffect(session.hasAccount) { vm.autoSync() }
 
     Scaffold(
@@ -344,6 +362,12 @@ fun MyDecksScreen(openDeck: (String) -> Unit, openImport: () -> Unit, openLogin:
         "link" -> TextInputDialog(
             title = t.openMoxfieldDeck,
             label = t.deckLinkOrId,
+            // Si se acaba de copiar un enlace o código de mazo, ya viene puesto.
+            initial = remember {
+                clipboard.getText()?.text.orEmpty().takeIf {
+                    ShareLink.parse(it) != null || it.contains("moxfield.com/decks/")
+                }.orEmpty()
+            },
             onDismiss = { dialog = null },
             onConfirm = { dialog = null; vm.openByLink(it) },
         )

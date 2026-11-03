@@ -1,6 +1,5 @@
 package es.moxlite.domain
 
-import es.moxlite.BuildConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -20,19 +19,21 @@ class ShareLinkTest {
     """.trimIndent()
 
     @Test
-    fun `ida y vuelta de un mazo de Moxfield con un enlace propio, no de Moxfield`() {
+    fun `ida y vuelta con un enlace moxlite que no pasa por ninguna web`() {
         val snapshot = DeckSnapshot(id = "PUB123", n = "Atraxa", f = "commander", a = "yo", t = list)
-        val link = ShareLink.build(snapshot, baseUrl = "https://katarem.github.io/moxlite/d/")
-        assertTrue(link, link.startsWith("https://katarem.github.io/moxlite/d/#moxlite="))
-        assertFalse(link.contains("moxfield.com"))
+        val link = ShareLink.build(snapshot)
+        assertTrue(link, link.startsWith("moxlite://deck/"))
+        assertFalse(link.contains("http"))
         assertEquals(snapshot, ShareLink.parse(link))
     }
 
     @Test
-    fun `por defecto usa la pagina del repositorio`() {
-        val link = ShareLink.build(DeckSnapshot(id = "PUB123", n = "X", t = "1 Sol Ring"))
-        assertTrue(link, link.startsWith(BuildConfig.SHARE_BASE_URL + "#moxlite="))
-        assertTrue(link, link.startsWith("https://") && link.contains(".github.io/"))
+    fun `el codigo suelto tambien abre el mazo`() {
+        val snapshot = DeckSnapshot(id = "PUB123", n = "Atraxa", t = list)
+        val code = ShareLink.code(snapshot)
+        assertEquals("moxlite://deck/$code", ShareLink.build(snapshot))
+        assertEquals(snapshot, ShareLink.parse(code))
+        assertEquals(snapshot, ShareLink.parse("  $code\n"))
     }
 
     @Test
@@ -45,15 +46,12 @@ class ShareLinkTest {
     }
 
     @Test
-    fun `el enlace de la app y los enlaces antiguos de Moxfield tambien se leen`() {
+    fun `los enlaces antiguos tambien se leen`() {
         val snapshot = DeckSnapshot(id = "PUB123", n = "Atraxa", t = list)
-        val app = ShareLink.appLink(snapshot)
-        assertTrue(app, app.startsWith("moxlite://d?moxlite="))
-        assertEquals(snapshot, ShareLink.parse(app))
-
-        val payload = ShareLink.build(snapshot).substringAfter("#moxlite=")
-        assertEquals(snapshot, ShareLink.parse("https://moxfield.com/decks/PUB123#moxlite=$payload"))
-        assertEquals(snapshot, ShareLink.parse("https://moxfield.com/decks/${ShareLink.LOCAL_PATH}#moxlite=$payload"))
+        val code = ShareLink.code(snapshot)
+        assertEquals(snapshot, ShareLink.parse("https://moxfield.com/decks/PUB123#moxlite=$code"))
+        assertEquals(snapshot, ShareLink.parse("https://moxfield.com/decks/${ShareLink.LOCAL_PATH}#moxlite=$code"))
+        assertEquals(snapshot, ShareLink.parse("https://katarem.github.io/moxlite/d/#moxlite=$code"))
     }
 
     @Test
@@ -75,5 +73,8 @@ class ShareLinkTest {
         assertNull(ShareLink.parse("https://moxfield.com/decks/PUB123"))
         assertNull(ShareLink.parse("https://moxfield.com/decks/PUB123#moxlite=esto-no-es-valido"))
         assertNull(ShareLink.parse("https://moxfield.com/decks/PUB123#moxlite="))
+        assertNull(ShareLink.parse("moxlite://deck/esto-tampoco-vale"))
+        assertNull(ShareLink.parse("un mensaje cualquiera sin mazo"))
+        assertNull(ShareLink.parse("PUB123abcdefghijklmn"))
     }
 }

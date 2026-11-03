@@ -17,7 +17,7 @@ Cliente Android personal para Moxfield: consultar y gestionar mazos **con y sin 
 | Vistas del mazo: texto, lista, cuadrícula y carta completa; agrupar por tipo/coste/color y ordenar | ✅ |
 | Añadir cartas con buscador con imágenes y en cualquier idioma ("rayo" o "lightning bolt") | ✅ |
 | Elegir arte / edición de cada carta | ✅ |
-| Compartir un mazo con un enlace que otra persona con Moxlite abre en su app | ✅ |
+| Compartir un mazo con un enlace `moxlite://` o un código que otra persona con Moxlite abre en su app | ✅ |
 | Guardar mazos sin conexión (cartas + imágenes) y guardar los tuyos automáticamente | ✅ |
 | Bloqueo de LaLiga a Cloudflare: aviso claro, cola que se sube sola después y proxy opcional | ✅ |
 | Idioma de la app (español / inglés) e idioma de las cartas (imágenes y nombres) | ✅ |
@@ -49,21 +49,18 @@ Durante los partidos, las operadoras españolas bloquean IPs de Cloudflare por o
 1. **Todo lo que abres queda en el móvil** y "Guardar mis mazos sin conexión" (activado por defecto) descarga tus mazos con imágenes en segundo plano.
 2. **Los cambios no se pierden**: se aplican en local y se suben solos cuando Moxfield vuelve (WorkManager reintenta con espera creciente).
 3. **El error dice lo que pasa** ("posible bloqueo de LaLiga") en vez de un fallo genérico.
-4. **Enlaces compartidos que llevan el mazo dentro**: quien lo recibe lo ve aunque Moxfield no cargue.
+4. **Enlaces y códigos compartidos que llevan el mazo dentro**: quien lo recibe lo ve aunque Moxfield no cargue.
 5. **Proxy opcional** (HTTP o SOCKS, Ajustes → Proxy): si tienes un servidor fuera de España (un VPS, el router de otra casa…), todo el tráfico de la app (y el WebView) sale por ahí. Un proxy dentro de España no sirve.
 
 ### Compartir mazos
 
-"Compartir enlace" genera `https://katarem.github.io/moxlite/d/#moxlite=<mazo comprimido>` (no un enlace de Moxfield). Es un enlace https normal (se puede tocar en WhatsApp), lleva el mazo entero dentro en el fragmento `#` (no llega a ningún servidor) y:
+"Compartir enlace" genera `moxlite://deck/<código>`, donde el código es el mazo entero comprimido (no pasa por Moxfield ni por ninguna web):
 
-- con Moxlite se abre directamente en la app si se ha activado **Ajustes → Abrir enlaces de mazos con Moxlite** ("Abrir enlaces compatibles");
-- si no, se abre la página `site/d/` (GitHub Pages), que enseña la lista de cartas y tiene **Abrir en Moxlite** (`moxlite://`), **Descargar Moxlite**, **Copiar lista** y **Ver en Moxfield**;
+- al tocarlo se abre directamente en Moxlite, aunque Moxfield esté bloqueado o el mazo sea privado;
+- donde no se pueda tocar (WhatsApp no convierte en enlace los esquemas propios), se copia y se pega en **Mis mazos → + → Abrir enlace o código**: vale el enlace, el mensaje entero o solo el código, y si está en el portapapeles ya aparece puesto;
+- **Copiar código** (menú del mazo) copia solo el código;
 - si el mazo solo existe en el móvil de quien lo manda, Moxlite ofrece importarlo;
-- los enlaces antiguos (`https://moxfield.com/decks/<id>#moxlite=…`) se siguen abriendo.
-
-La página se publica con `.github/workflows/pages.yml` en cada cambio de `site/`. **Hay que activarlo una vez**: Settings → Pages → Source: *GitHub Actions*. El dominio sale del repositorio (`<usuario>.github.io/<repo>`), así que un fork usa el suyo.
-
-Para que Android abra los enlaces en la app sin tocar ajustes haría falta publicar `/.well-known/assetlinks.json` en la raíz de `katarem.github.io` (un repositorio `katarem.github.io`) con la huella del certificado de firma; la app ya declara `autoVerify` para ese dominio.
+- los enlaces antiguos (`…#moxlite=<código>`) se siguen abriendo.
 
 ### Escritura: qué está verificado
 
