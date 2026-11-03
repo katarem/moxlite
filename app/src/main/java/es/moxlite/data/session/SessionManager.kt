@@ -83,7 +83,8 @@ class SessionManager(private val context: Context) {
             current.copy(
                 accessToken = token,
                 expiresAt = exp ?: current.expiresAt,
-                userName = claimUser ?: current.userName,
+                // El nombre bueno llega con la renovación (user_name); esto es solo un respaldo.
+                userName = current.userName.ifBlank { claimUser.orEmpty() },
                 needsLogin = false,
             )
         }
