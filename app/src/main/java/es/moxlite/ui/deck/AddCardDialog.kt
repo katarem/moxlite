@@ -10,7 +10,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,6 +30,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -37,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,32 +68,56 @@ import es.moxlite.ui.common.MessageBox
 fun AddCardDialog(vm: DeckViewModel, onDismiss: () -> Unit) {
     val t = LocalStrings.current
     val search by vm.search.collectAsStateWithLifecycle()
+    // El texto vive aquí y no en el ViewModel: escribir y borrar es inmediato aunque la búsqueda
+    // tarde, y una búsqueda que llega tarde nunca cambia lo escrito.
+    var text by rememberSaveable { mutableStateOf(search.query) }
     var chosen by remember { mutableStateOf<ScryCard?>(null) }
     var board by remember { mutableStateOf(Boards.MAIN) }
     var quantity by remember { mutableIntStateOf(1) }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        // Pantalla completa de verdad, respetando barras de estado y navegación y el teclado:
+        // antes el panel de cantidad y "Añadir" quedaba debajo de la barra de navegación.
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
         Surface(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().imePadding()) {
+            Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
                 Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onDismiss) { Icon(Icons.Outlined.Close, t.close) }
                     Text(t.addCard, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
                 }
                 OutlinedTextField(
-                    value = search.query,
-                    onValueChange = { chosen = null; vm.searchCards(it) },
+                    value = text,
+                    onValueChange = {
+                        text = it
+                        chosen = null
+                        vm.searchCards(it)
+                    },
                     placeholder = { Text(t.searchCardPlaceholder) },
                     leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                    trailingIcon = {
+                        if (text.isNotEmpty()) {
+                            IconButton(onClick = { text = ""; chosen = null; vm.searchCards("") }) {
+                                Icon(Icons.Outlined.Close, t.clear)
+                            }
+                        }
+                    },
                     supportingText = { Text(t.searchCardHint) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 )
 
+                // Mientras busca se siguen viendo los resultados anteriores, con una barra arriba.
+                val searching = search.loading || (text.trim().length >= 2 && text != search.query)
+                if (searching) LinearProgressIndicator(Modifier.fillMaxWidth()) else Spacer(Modifier.height(4.dp))
                 Box(Modifier.weight(1f)) {
                     when {
-                        search.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                        search.error != null -> MessageBox(search.error.orEmpty())
-                        search.query.trim().length >= 2 && search.results.isEmpty() -> MessageBox(t.noResults, isError = false)
+                        search.loading && search.results.isEmpty() ->
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                        search.error != null && !searching -> MessageBox(search.error.orEmpty())
+                        !searching && search.query.trim().length >= 2 && search.results.isEmpty() ->
+                            MessageBox(t.noResults, isError = false)
                         else -> LazyColumn(Modifier.fillMaxSize()) {
                             items(search.results, key = { it.id }) { card ->
                                 SearchResultRow(card, selected = chosen?.id == card.id) { chosen = card }
@@ -111,7 +140,7 @@ fun AddCardDialog(vm: DeckViewModel, onDismiss: () -> Unit) {
                                     FilterChip(selected = board == b, onClick = { board = b }, label = { Text(Boards.label(b)) })
                                 }
                             }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text(t.quantity, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                                 TextButton(onClick = { if (quantity > 1) quantity-- }) { Text("−") }
                                 Text("$quantity")

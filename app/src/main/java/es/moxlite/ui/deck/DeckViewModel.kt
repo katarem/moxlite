@@ -12,6 +12,7 @@ import es.moxlite.data.repo.PrintingKey
 import es.moxlite.domain.ShareLink
 import es.moxlite.i18n.I18n
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 sealed interface DeckEvent {
@@ -46,7 +48,10 @@ data class PrintingsState(
     val error: String? = null,
 )
 
-/** Estado del buscador de cartas para añadir. */
+/**
+ * Resultados del buscador de cartas para añadir. [query] es el texto de esos resultados, no el
+ * del campo: el campo vive en la pantalla para que escribir y borrar no dependa de la red.
+ */
 data class CardSearchState(
     val query: String = "",
     val loading: Boolean = false,
@@ -193,20 +198,28 @@ class DeckViewModel(private val c: AppContainer, val publicId: String) : ViewMod
 
     // ---------- Añadir cartas ----------
 
-    /** Busca en cualquier idioma, con imagen de cada resultado. */
+    /**
+     * Busca en cualquier idioma, con imagen de cada resultado. Espera a que se deje de escribir y
+     * cancela la búsqueda anterior; mientras busca, se siguen viendo los resultados anteriores.
+     */
     fun searchCards(query: String) {
-        _search.value = _search.value.copy(query = query)
         searchJob?.cancel()
         if (query.trim().length < 2) {
             _search.value = CardSearchState(query = query)
             return
         }
         searchJob = viewModelScope.launch {
-            delay(400)
-            _search.value = _search.value.copy(loading = true, error = null)
-            runCatching { c.cardRepository.searchAnyLanguage(query) }
-                .onSuccess { _search.value = CardSearchState(query = query, results = it) }
-                .onFailure { _search.value = CardSearchState(query = query, error = it.userMessage()) }
+            delay(350)
+            _search.update { it.copy(loading = true, error = null) }
+            val next = try {
+                CardSearchState(query = query, results = c.cardRepository.searchAnyLanguage(query))
+            } catch (e: CancellationException) {
+                // Se ha escrito algo más: no tocar el estado (antes se volvía al texto viejo).
+                throw e
+            } catch (e: Exception) {
+                CardSearchState(query = query, error = e.userMessage())
+            }
+            _search.value = next
         }
     }
 

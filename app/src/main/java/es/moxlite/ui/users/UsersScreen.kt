@@ -51,6 +51,7 @@ import es.moxlite.ui.common.SectionHeader
 import es.moxlite.ui.common.appContainer
 import es.moxlite.ui.search.DeckResultsList
 import es.moxlite.ui.search.DeckSearchViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,9 +75,14 @@ class UsersViewModel(private val repo: DeckRepository) : ViewModel() {
         job?.cancel()
         job = viewModelScope.launch {
             if (debounce) delay(350)
-            runCatching { repo.searchUsers(text) }
-                .onSuccess { _results.value = it; _error.value = null }
-                .onFailure { _error.value = it.userMessage() }
+            try {
+                _results.value = repo.searchUsers(text)
+                _error.value = null
+            } catch (e: CancellationException) {
+                throw e // búsqueda sustituida por otra: no es un error
+            } catch (e: Exception) {
+                _error.value = e.userMessage()
+            }
         }
     }
 
