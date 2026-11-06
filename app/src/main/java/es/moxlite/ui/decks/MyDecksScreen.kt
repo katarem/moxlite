@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Link
@@ -212,6 +213,7 @@ fun MyDecksScreen(
     openDeck: (String) -> Unit,
     openShared: (DeckSnapshot) -> Unit,
     openImport: () -> Unit,
+    openBuilder: () -> Unit,
     openLogin: () -> Unit,
     openAccount: () -> Unit,
 ) {
@@ -265,6 +267,11 @@ fun MyDecksScreen(
                         text = { Text(t.newDeck) },
                         leadingIcon = { Icon(Icons.Outlined.NoteAdd, null) },
                         onClick = { menu = false; dialog = "new" },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(t.edhBuilder) },
+                        leadingIcon = { Icon(Icons.Outlined.AutoAwesome, null) },
+                        onClick = { menu = false; openBuilder() },
                     )
                     DropdownMenuItem(
                         text = { Text(t.importTextList) },

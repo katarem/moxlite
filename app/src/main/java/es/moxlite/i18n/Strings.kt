@@ -286,6 +286,64 @@ interface Strings {
     val updChannelName: String
     val updChannelDescription: String
     val updNotificationText: String
+    // Asistente EDHREC
+    val edhBuilder: String
+    val edhImproveDeck: String
+    val edhIntro: String
+    val edhSearchCommander: String
+    val edhSearchPartner: String
+    val edhAddPartner: String
+    val edhCommanders: String
+    fun edhDecksOnEdhrec(n: Int): String
+    val edhTheme: String
+    val edhBudget: String
+    fun edhBudgetLabel(budget: es.moxlite.data.remote.edhrec.EdhBudget): String
+    val edhBracket: String
+    val edhBracketThemeHint: String
+    fun edhAverageLands(n: Int): String
+    val edhStartAverage: String
+    val edhStartAverageHint: String
+    val edhStartEmpty: String
+    val edhStartImprove: String
+    val edhReplaceWithAverage: String
+    val edhReplaceConfirm: String
+    val edhLoadingAverage: String
+    fun edhAverageLoaded(n: Int): String
+    val edhAutoFilling: String
+    fun edhAutoFilled(n: Int): String
+    val edhNothingToAdd: String
+    val edhLandsComplete: String
+    fun edhBasicsAdded(n: Int): String
+    val edhDeckCreated: String
+    val edhDeckUpdated: String
+    val edhNotFound: String
+    fun edhServerError(code: Int): String
+    fun edhRoleLabel(role: es.moxlite.domain.CardRole): String
+    fun edhListLabel(tag: String, header: String): String
+    val edhSuggestions: String
+    val edhCuts: String
+    val edhCutsHint: String
+    val edhNoCuts: String
+    fun edhCutScore(score: Int): String
+    val edhForDeck: String
+    fun edhRecsFailed(detail: String): String
+    fun edhSynergy(percent: Int): String
+    fun edhInclusion(percent: Int): String
+    fun edhFit(score: Int): String
+    fun edhCardsCount(n: Int): String
+    fun edhAvgCmc(value: String): String
+    val edhAutoFill: String
+    val edhBasics: String
+    val edhCreateDeck: String
+    val edhSaveToDeck: String
+    fun edhNot100(n: Int): String
+    val edhTargets: String
+    val edhTargetsHint: String
+    val edhDiscard: String
+    val edhDiscardConfirm: String
+    val edhOptions: String
+    val edhEmptyDeck: String
+    val edhNoSuggestions: String
 }
 
 /** Nombres de idiomas de cartas (en su propio idioma, como en Scryfall). */

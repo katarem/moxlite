@@ -55,6 +55,28 @@ class CardRepository(private val api: ScryfallService) {
         ).map { it.displayName to it.name }.distinctBy { it.second }.take(MAX_RESULTS)
     }
 
+    /**
+     * Como [commanderSuggestions], pero con una condición de Scryfall propia ([filter]), para
+     * buscar la pareja de un comandante (partner, background…). Devuelve las cartas.
+     */
+    suspend fun commanderSearch(text: String, filter: String): List<ScryCard> {
+        val q = text.trim().replace("\"", "")
+        val query = if (q.isEmpty()) filter else "$filter \"$q\""
+        return searchOrEmpty(
+            mapOf("q" to query, "include_multilingual" to "true", "unique" to "cards", "order" to "edhrec")
+        ).distinctBy { it.oracleId ?: it.name }.take(MAX_RESULTS)
+    }
+
+    /** Cartas por id de Scryfall, en lotes de 75. Las que no existen no aparecen. */
+    suspend fun byIds(ids: List<String>): Map<String, ScryCard> {
+        val result = LinkedHashMap<String, ScryCard>()
+        ids.distinct().chunked(75).forEachIndexed { index, chunk ->
+            if (index > 0) delay(120)
+            api.collection(ScryCollectionRequest(chunk.map { ScryIdentifier(id = it) })).data.forEach { result[it.id] = it }
+        }
+        return result
+    }
+
     /** Todas las impresiones (artes) de una carta, de la más nueva a la más antigua. */
     suspend fun printings(cardName: String): List<ScryCard> = searchOrEmpty(
         mapOf(

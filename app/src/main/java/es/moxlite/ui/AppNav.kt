@@ -36,6 +36,7 @@ import es.moxlite.domain.DeckSnapshot
 import es.moxlite.i18n.Strings
 import es.moxlite.ui.account.AccountScreen
 import es.moxlite.ui.account.WelcomeScreen
+import es.moxlite.ui.builder.BuilderScreen
 import es.moxlite.ui.common.LocalStrings
 import es.moxlite.ui.common.OfflineBanner
 import es.moxlite.ui.common.appContainer
@@ -65,8 +66,10 @@ object Routes {
     const val WEB = "web/{mode}?url={url}"
     const val IMPORT = "import"
     const val API_LOG = "apilog"
+    const val BUILDER = "builder?deck={deck}"
 
     fun deck(id: String) = "deck/${Uri.encode(id)}"
+    fun builder(deckId: String? = null) = "builder" + (deckId?.let { "?deck=${Uri.encode(it)}" } ?: "")
     fun user(name: String) = "user/${Uri.encode(name)}"
     fun web(mode: WebMode, url: String? = null) =
         "web/${mode.name}" + (url?.let { "?url=${Uri.encode(it)}" } ?: "")
@@ -158,6 +161,7 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
                         openDeck = { nav.navigate(Routes.deck(it)) },
                         openShared = ::openShared,
                         openImport = { importDraft = ImportDraft(); nav.navigate(Routes.IMPORT) },
+                        openBuilder = { nav.navigate(Routes.builder()) },
                         openLogin = { nav.navigate(Routes.web(WebMode.LOGIN)) },
                         openAccount = { nav.navigate(Routes.ACCOUNT) },
                     )
@@ -191,6 +195,24 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
                         openUser = { nav.navigate(Routes.user(it)) },
                         openWeb = { url -> nav.navigate(Routes.web(WebMode.BROWSE, url)) },
                         openLogin = { nav.navigate(Routes.web(WebMode.LOGIN)) },
+                        openBuilder = { nav.navigate(Routes.builder(it)) },
+                    )
+                }
+                composable(
+                    Routes.BUILDER,
+                    arguments = listOf(navArgument("deck") { type = NavType.StringType; nullable = true; defaultValue = null }),
+                ) { entry ->
+                    val sourceDeck = entry.arguments?.getString("deck")
+                    BuilderScreen(
+                        deckId = sourceDeck,
+                        onBack = { nav.popBackStack() },
+                        openDeck = { id ->
+                            nav.navigate(Routes.deck(id)) {
+                                // Al terminar: el asistente (y el mazo que se mejoraba) salen de la pila.
+                                popUpTo(Routes.BUILDER) { inclusive = true }
+                                if (sourceDeck != null) popUpTo(Routes.DECK) { inclusive = true }
+                            }
+                        },
                     )
                 }
                 composable(Routes.USER, arguments = listOf(navArgument("name") { type = NavType.StringType })) { entry ->

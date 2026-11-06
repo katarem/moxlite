@@ -1,0 +1,63 @@
+{
+ "header": "Average Deck for Atraxa, Praetors' Voice",
+ "land": 36,
+ "archidekt": [
+  {
+   "c": "c",
+   "f": 0,
+   "q": 1,
+   "u": "d0d33d52-3d28-4635-b985-51e126289259"
+  },
+  {
+   "c": "m",
+   "f": 0,
+   "q": 1,
+   "u": "795df2ee-fbfc-4961-852c-e3ec50cc52da"
+  },
+  {
+   "c": "m",
+   "f": 0,
+   "q": 1,
+   "u": "31f19637-c75e-4bcf-b7b7-5da3284d240d"
+  },
+  {
+   "c": "m",
+   "f": 0,
+   "q": 1,
+   "u": "9b29492a-8bdd-4806-8d1b-3058ed277cc1"
+  }
+ ],
+ "deck": {
+  "commander": [
+   "Atraxa, Praetors' Voice"
+  ],
+  "commander_v2": [
+   [
+    "Atraxa, Praetors' Voice",
+    1
+   ]
+  ],
+  "cards": {
+   "Artifact": [
+    [
+     "Arcane Signet",
+     1
+    ],
+    [
+     "Astral Cornucopia",
+     1
+    ]
+   ],
+   "Land": [
+    [
+     "Forest",
+     4
+    ],
+    [
+     "Island",
+     3
+    ]
+   ]
+  }
+ }
+}

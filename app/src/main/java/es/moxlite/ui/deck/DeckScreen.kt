@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.outlined.Subject
 import androidx.compose.material.icons.automirrored.outlined.ViewList
 import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.DeleteOutline
@@ -131,6 +132,7 @@ fun DeckScreen(
     openUser: (String) -> Unit,
     openWeb: (url: String) -> Unit,
     openLogin: () -> Unit,
+    openBuilder: (String) -> Unit,
 ) {
     val container = appContainer()
     val t = LocalStrings.current
@@ -203,6 +205,9 @@ fun DeckScreen(
                             MenuItem(t.exportText, Icons.Outlined.Share) { menu = false; dialog = "export" }
                             MenuItem(t.copyDeck, Icons.Outlined.ContentCopy) { menu = false; dialog = "copy" }
                             if (canEdit) MenuItem(t.rename, Icons.Outlined.Edit) { menu = false; dialog = "rename" }
+                            if (canEdit && d.format.equals("commander", ignoreCase = true)) {
+                                MenuItem(t.edhImproveDeck, Icons.Outlined.AutoAwesome) { menu = false; openBuilder(d.publicId) }
+                            }
                         }
                         if (d != null && !d.isLocalOnly) {
                             MenuItem(t.viewOnMoxfieldWeb, Icons.Outlined.OpenInBrowser) {

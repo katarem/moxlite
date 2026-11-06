@@ -495,6 +495,35 @@ class DeckRepository(
         return ImportResult(id, lines.size, resolved.filterValues { it == null }.keys.map { it.name })
     }
 
+    /**
+     * Crea un mazo con cartas ya resueltas (las del asistente): se guarda en el móvil y se sube a
+     * Moxfield de una vez, como una importación.
+     */
+    suspend fun createFromCards(name: String, format: String, cards: List<Triple<String, ScryCard, Int>>): String {
+        val id = newLocalId()
+        val rows = cards.map { (board, card, qty) -> DeckMapper.fromScryfall(id, board, card, qty) }
+            .groupBy { it.board to it.cardKey }
+            .map { (_, same) -> same.first().copy(quantity = same.sumOf { it.quantity }) }
+        val featured = rows.firstOrNull { it.board == Boards.COMMANDERS } ?: rows.firstOrNull { it.board == Boards.MAIN }
+        decks.replaceDeck(
+            newLocalDeck(id, name, format).copy(
+                featuredScryfallId = featured?.scryfallId,
+                colorIdentity = DeckMapper.colors(rows.flatMap { r -> r.colorIdentity.map { it.toString() } }),
+                mainboardCount = rows.filter { it.board == Boards.MAIN }.sumOf { it.quantity },
+                commanders = DeckMapper.commanderNames(rows),
+                viewedAt = System.currentTimeMillis(),
+            ),
+            rows,
+        )
+        enqueue(id, DeckOp.CreateDeck(name, format))
+        return id
+    }
+
+    /** Cartas de un mazo guardado en el móvil. */
+    suspend fun cardsOf(deckId: String): List<DeckCardEntity> = decks.getCards(deckId)
+
+    suspend fun deckOf(deckId: String): DeckEntity? = decks.get(deckId)
+
     suspend fun exportText(deckId: String, includePrintings: Boolean = true): String {
         val lines = decks.getCards(deckId).map {
             DeckLine(it.quantity, it.name, it.board, it.setCode.ifBlank { null }, it.collectorNumber, it.isFoil)
