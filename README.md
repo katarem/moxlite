@@ -23,6 +23,7 @@ Cliente Android personal para Moxfield: consultar y gestionar mazos **con y sin 
 | Idioma de la app (español / inglés) e idioma de las cartas (imágenes y nombres) | ✅ |
 | Copiar mazos ajenos, crear mazos, importar/exportar listas de texto | ✅ |
 | Buscar usuarios, seguirlos y ver sus mazos públicos | ✅ |
+| **Asistente EDHREC**: construir un mazo de Commander (o mejorar uno tuyo) con sugerencias, objetivos por función y autocompletado | ✅ (nuevo, ver abajo) |
 
 ## Cómo funciona
 
@@ -51,6 +52,23 @@ Durante los partidos, las operadoras españolas bloquean IPs de Cloudflare por o
 3. **El error dice lo que pasa** ("posible bloqueo de LaLiga") en vez de un fallo genérico.
 4. **Enlaces y códigos compartidos que llevan el mazo dentro**: quien lo recibe lo ve aunque Moxfield no cargue.
 5. **Proxy opcional** (HTTP o SOCKS, Ajustes → Proxy): si tienes un servidor fuera de España (un VPS, el router de otra casa…), todo el tráfico de la app (y el WebView) sale por ahí. Un proxy dentro de España no sirve.
+
+### Asistente EDHREC
+
+**Mis mazos → + → Asistente EDHREC** (mazo nuevo) o, en un mazo de Commander tuyo, **⋮ → Mejorar con EDHREC**.
+
+1. **Comandante**: se busca en cualquier idioma. Si admite pareja (partner, "partner with", background, friends forever, doctor's companion) se ofrece añadirla.
+2. **Enfoque**: tema de EDHREC (Infect, Tokens…), presupuesto (económico/caro) y bracket (1–5), con el número de mazos de cada opción. EDHREC combina tema + presupuesto y bracket + presupuesto, pero no tema + bracket.
+3. **Empezar** con el mazo medio de EDHREC para ese enfoque, o solo con el comandante.
+4. **Construir**:
+   - **Sugerencias** "Para tu mazo": recomendaciones de EDHREC calculadas sobre el mazo tal como está (se recalculan al añadir o quitar), y las listas de EDHREC (Top, Nuevas, Criaturas, Tierras…) con su sinergia y % de inclusión.
+   - **Objetivos por función**: tierras (media de EDHREC para el comandante), ramp 10, robo 10, interacción 8, barridos 3, ajustables. La función se deduce del texto de reglas (aproximado); tocar un contador filtra las sugerencias de esa función.
+   - **Curva de maná** y coste medio.
+   - **Autocompletar** hasta 100: primero lo que falta de cada función, luego las mejores sugerencias, y tierras (no básicas de EDHREC y básicas repartidas según los símbolos de maná).
+   - **Sobran**: cartas del mazo que EDHREC ve poco con ese comandante.
+5. **Crear mazo** (o **Guardar** en el mazo que se mejoraba): se guarda en el móvil y se sube a Moxfield como cualquier otro cambio.
+
+Todo se guarda solo: se puede salir y seguir más tarde. Si el mazo que se estaba mejorando cambia entretanto, el asistente vuelve a empezar desde el mazo actual para no deshacer nada. Las páginas de EDHREC quedan en el móvil y valen sin conexión; EDHREC va por AWS, no por Cloudflare, así que el bloqueo de LaLiga no debería afectarle. Endpoints en [`docs/edhrec-api.md`](docs/edhrec-api.md).
 
 ### Compartir mazos
 

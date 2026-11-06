@@ -7,9 +7,11 @@ import android.net.NetworkCapabilities
 import coil.ImageLoader
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
+import es.moxlite.data.builder.BuilderRepository
 import es.moxlite.data.local.AppDatabase
 import es.moxlite.data.remote.Http
 import es.moxlite.data.remote.MoxError
+import es.moxlite.data.remote.edhrec.EdhrecClient
 import es.moxlite.data.remote.isCloudflareChallenge
 import es.moxlite.data.remote.looksLikeBlocking
 import es.moxlite.data.remote.moxfield.MoxfieldService
@@ -152,6 +154,19 @@ class AppContainer(private val context: Context) {
         .addInterceptor(logging)
         .build()
 
+    /** EDHREC (json.edhrec.com y edhrec.com/api): User-Agent identificable, como con Scryfall. */
+    private val edhrecHttp = baseClient.newBuilder()
+        .addInterceptor(Interceptor { chain ->
+            chain.proceed(
+                chain.request().newBuilder()
+                    .header("User-Agent", "Moxlite/${BuildConfig.VERSION_NAME} (cliente personal Android)")
+                    .header("Accept", "application/json")
+                    .build()
+            )
+        })
+        .addInterceptor(logging)
+        .build()
+
     private val moxfieldService: MoxfieldService = Retrofit.Builder()
         .baseUrl("https://api2.moxfield.com/")
         .client(moxfieldClient)
@@ -204,12 +219,20 @@ class AppContainer(private val context: Context) {
         settings = settings,
     )
 
+    /** Asistente de construcción de mazos con EDHREC. */
+    val builderRepository = BuilderRepository(
+        edhrec = EdhrecClient(edhrecHttp, context.filesDir.resolve("edhrec")),
+        cards = cardRepository,
+        decks = deckRepository,
+        dir = context.filesDir.resolve("builder"),
+    )
+
     init {
         I18n.apply(settings.appLanguage.value)
         settings.appLanguage.drop(1).onEach { I18n.apply(it) }.launchIn(appScope)
         // Al cambiar el proxy, cerrar conexiones abiertas para que las nuevas lo usen.
         settings.proxy.drop(1).onEach {
-            listOf(baseClient, moxfieldClient, scryfallClient).forEach { c -> c.connectionPool.evictAll() }
+            listOf(baseClient, moxfieldClient, scryfallClient, edhrecHttp).forEach { c -> c.connectionPool.evictAll() }
         }.launchIn(appScope)
     }
 }

@@ -1,0 +1,73 @@
+{
+ "commanders": [
+  {
+   "name": "Atraxa, Praetors' Voice",
+   "names": [
+    "Atraxa, Praetors' Voice"
+   ],
+   "oracle_id": "7e6b9b59-cd68-4e3c-827b-38833c92d6eb",
+   "primary_type": "Creature",
+   "salt": 1.7713884992987377
+  }
+ ],
+ "deck": {
+  "Arcane Signet": 1,
+  "Astral Cornucopia": 1,
+  "Chromatic Lantern": 1
+ },
+ "inRecs": [
+  {
+   "name": "Three Visits",
+   "names": [
+    "Three Visits"
+   ],
+   "oracle_id": "1b882a0e-0ede-4d1a-bd1a-9b7cffbcde8e",
+   "primary_type": "Sorcery",
+   "salt": 0.16494845360824742,
+   "score": 40
+  },
+  {
+   "name": "Rejuvenating Springs",
+   "names": [
+    "Rejuvenating Springs"
+   ],
+   "oracle_id": "d1620449-930a-4895-a143-fd2a0a3c8b17",
+   "primary_type": "Land",
+   "salt": 0.08396946564885496,
+   "score": 40
+  },
+  {
+   "name": "Vishgraz, the Doomhive",
+   "names": [
+    "Vishgraz, the Doomhive"
+   ],
+   "oracle_id": "7b1599c0-bb4f-48f8-a358-dc60166b13e7",
+   "primary_type": "Creature",
+   "salt": 0.5333333333333333,
+   "score": 39
+  }
+ ],
+ "outRecs": [
+  {
+   "name": "Oko, Thief of Crowns",
+   "names": [
+    "Oko, Thief of Crowns"
+   ],
+   "oracle_id": "60c60923-ff1b-43f7-8768-731499fcffc9",
+   "primary_type": "Planeswalker",
+   "salt": 1.4833110814419226,
+   "score": 39
+  },
+  {
+   "name": "Teferi, Master of Time",
+   "names": [
+    "Teferi, Master of Time"
+   ],
+   "oracle_id": "e802fb53-7cf5-46bc-8a0b-f99cf5c20f74",
+   "primary_type": "Planeswalker",
+   "salt": 1.1279887482419129,
+   "score": 38
+  }
+ ],
+ "more": true
+}

@@ -1,0 +1,189 @@
+{
+ "creature": 24,
+ "instant": 10,
+ "sorcery": 8,
+ "artifact": 9,
+ "enchantment": 7,
+ "battle": 0,
+ "planeswalker": 5,
+ "land": 36,
+ "basic": 13,
+ "nonbasic": 23,
+ "header": "Atraxa, Praetors' Voice (Commander)",
+ "bracket_counts": {
+  "3": 4118,
+  "4": 2587,
+  "2": 3161,
+  "5": 190,
+  "1": 153
+ },
+ "budget_counts": {
+  "budget": 4618,
+  "middle": 36945,
+  "expensive": 4618
+ },
+ "tag_counts": [
+  {
+   "count": 3581,
+   "slug": "infect",
+   "value": "Infect"
+  },
+  {
+   "count": 2170,
+   "slug": "plus-1-plus-1-counters",
+   "value": "+1/+1 Counters"
+  },
+  {
+   "count": 1810,
+   "slug": "planeswalkers",
+   "value": "Planeswalkers"
+  }
+ ],
+ "panels": {
+  "mana_curve": {
+   "0": 1,
+   "1": 8,
+   "2": 18,
+   "3": 16,
+   "4": 10,
+   "5": 6,
+   "6": 3,
+   "7": 1
+  },
+  "taglinks": [
+   {
+    "count": 3581,
+    "slug": "infect",
+    "value": "Infect"
+   },
+   {
+    "count": 2170,
+    "slug": "plus-1-plus-1-counters",
+    "value": "+1/+1 Counters"
+   }
+  ]
+ },
+ "container": {
+  "title": "Atraxa, Praetors' Voice (Commander)",
+  "json_dict": {
+   "cardlists": [
+    {
+     "header": "Top Cards",
+     "tag": "topcards",
+     "cardviews": [
+      {
+       "id": "2d389264-e2d2-4589-9636-faa11fe46710",
+       "name": "Tekuthal, Inquiry Dominus",
+       "sanitized": "tekuthal-inquiry-dominus",
+       "slug": "tekuthal-inquiry-dominus",
+       "url": "/cards/tekuthal-inquiry-dominus",
+       "image_version": "1783906040",
+       "synergy": 0.2702221155296247,
+       "lift": 1.6764534787931988,
+       "num_decks": 30927,
+       "potential_decks": 46181,
+       "trend_zscore": -0.23561015010767625
+      },
+      {
+       "id": "1d58d08d-cd62-416d-8d8e-7d9c56d5c4da",
+       "name": "Evolution Sage",
+       "sanitized": "evolution-sage",
+       "slug": "evolution-sage",
+       "url": "/cards/evolution-sage",
+       "image_version": "1783904546",
+       "synergy": 0.23763652498374682,
+       "lift": 1.6677103657982588,
+       "num_decks": 27410,
+       "potential_decks": 46181,
+       "trend_zscore": -0.13416906153395178
+      }
+     ]
+    },
+    {
+     "header": "Creatures",
+     "tag": "creatures",
+     "cardviews": [
+      {
+       "id": "3c520263-6bad-4521-ba9e-192ca8223b07",
+       "name": "Flux Channeler",
+       "sanitized": "flux-channeler",
+       "slug": "flux-channeler",
+       "url": "/cards/flux-channeler",
+       "image_version": "1783915442",
+       "synergy": 0.171228036994521,
+       "lift": 1.7265556926840393,
+       "num_decks": 18791,
+       "potential_decks": 46181,
+       "trend_zscore": 0.20235161562478202
+      },
+      {
+       "id": "411bda96-6c65-475d-9850-0a9b3eefa553",
+       "name": "Bloated Contaminator",
+       "sanitized": "bloated-contaminator",
+       "slug": "bloated-contaminator",
+       "url": "/cards/bloated-contaminator",
+       "image_version": "1783918018",
+       "synergy": 0.13641713367722505,
+       "lift": 1.6461998031004679,
+       "num_decks": 16049,
+       "potential_decks": 46181,
+       "trend_zscore": -1.6578011148988174
+      }
+     ]
+    },
+    {
+     "header": "Lands",
+     "tag": "lands",
+     "cardviews": [
+      {
+       "id": "2e781bfd-f8cb-4d20-b977-4359f3a21311",
+       "name": "Forest",
+       "sanitized": "forest",
+       "slug": "forest",
+       "url": "/cards/forest",
+       "image_version": "1791578317",
+       "synergy": 0.12889455019388119,
+       "lift": 1.163137398641094,
+       "num_decks": 42440,
+       "potential_decks": 46181,
+       "trend_zscore": 0.0
+      },
+      {
+       "id": "a73297d2-580c-4174-a427-265f6916d09f",
+       "name": "Command Tower",
+       "sanitized": "command-tower",
+       "slug": "command-tower",
+       "url": "/cards/command-tower",
+       "image_version": "1793021256",
+       "synergy": -0.0040372447351683105,
+       "lift": 0.9956223983220583,
+       "num_decks": 42404,
+       "potential_decks": 46181,
+       "trend_zscore": 0.0
+      }
+     ]
+    }
+   ],
+   "card": {
+    "name": "Atraxa, Praetors' Voice",
+    "names": [
+     "Atraxa, Praetors' Voice"
+    ],
+    "id": "d0d33d52-3d28-4635-b985-51e126289259",
+    "num_decks": 46181,
+    "color_identity": [
+     "G",
+     "W",
+     "U",
+     "B"
+    ],
+    "rank": 4,
+    "salt": 1.7713884992987377
+   }
+  }
+ },
+ "similar": [
+  "Atraxa, Grand Unifier",
+  "Ixhel, Scion of Atraxa"
+ ]
+}
