@@ -1,6 +1,5 @@
 package es.moxlite.ui.common
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -43,14 +43,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import es.moxlite.domain.ColorMatch
 import es.moxlite.domain.DeckFilters
 import es.moxlite.domain.DeckSort
-import es.moxlite.ui.theme.ManaColors
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
@@ -207,22 +206,18 @@ private fun ColorsDialog(filters: DeckFilters, onDismiss: () -> Unit, onApply: (
                         val on = c in draft.colors
                         Box(
                             Modifier
-                                .size(36.dp)
+                                .size(40.dp)
                                 .clip(CircleShape)
-                                .background(ManaColors.of(c).copy(alpha = if (on) 1f else 0.25f))
                                 .border(
-                                    width = if (on) 3.dp else 1.dp,
-                                    color = if (on) MaterialTheme.colorScheme.primary else Color.Black.copy(alpha = 0.3f),
+                                    width = if (on) 3.dp else 0.dp,
+                                    color = if (on) MaterialTheme.colorScheme.primary else Color.Transparent,
                                     shape = CircleShape,
                                 )
-                                .clickable { draft = draft.toggleColor(c) },
+                                .clickable { draft = draft.toggleColor(c) }
+                                .padding(4.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(
-                                c.toString(),
-                                fontWeight = FontWeight.Bold,
-                                color = if (c == 'W' || c == 'C') Color.Black else Color.White,
-                            )
+                            ManaSymbol(c.toString(), Modifier.fillMaxSize().alpha(if (on) 1f else 0.35f))
                         }
                     }
                 }
