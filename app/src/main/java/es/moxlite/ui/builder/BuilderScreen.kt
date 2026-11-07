@@ -84,11 +84,11 @@ import es.moxlite.domain.BasicLands
 import es.moxlite.domain.CardRole
 import es.moxlite.domain.DeckStats
 import es.moxlite.ui.common.LocalStrings
+import es.moxlite.ui.common.ManaText
 import es.moxlite.ui.common.MessageBox
 import es.moxlite.ui.common.SectionHeader
 import es.moxlite.ui.common.appContainer
 import es.moxlite.ui.deck.ConfirmDialog
-import es.moxlite.ui.deck.ManaText
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -604,7 +604,7 @@ private fun SuggestionsTab(
                     imageUrl = null,
                     title = s.name,
                     subtitle = listOfNotNull(
-                        s.card?.let { ManaText.plain(it.manaCost ?: it.cardFaces.firstOrNull()?.manaCost.orEmpty()).ifBlank { null } },
+                        s.card?.let { (it.manaCost ?: it.cardFaces.firstOrNull()?.manaCost).orEmpty().ifBlank { null } },
                         s.card?.typeLine ?: s.primaryType.takeIf { it.isNotBlank() }?.let { t.typeLabel(it) },
                     ).joinToString("  "),
                     detail = suggestionDetail(s),
@@ -668,8 +668,8 @@ private fun DeckLine(card: ScryCard, quantity: Int, onPreview: () -> Unit, trail
     ) {
         Text("$quantity", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(28.dp))
         Text(card.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-        Text(
-            ManaText.plain(card.manaCost ?: card.cardFaces.firstOrNull()?.manaCost.orEmpty()),
+        ManaText(
+            (card.manaCost ?: card.cardFaces.firstOrNull()?.manaCost).orEmpty(),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -769,7 +769,7 @@ private fun CardRow(
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (subtitle.isNotBlank()) {
-                Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                ManaText(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (!detail.isNullOrBlank()) {
                 Text(detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -804,8 +804,12 @@ private fun CardPreviewDialog(
                     Spacer(Modifier.height(12.dp))
                 }
                 Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                card?.typeLine?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                card?.fullOracle?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
+                card?.let { c ->
+                    val cost = c.manaCost?.ifBlank { null } ?: c.cardFaces.mapNotNull { it.manaCost?.ifBlank { null } }.joinToString(" // ")
+                    val line = listOf(cost, c.typeLine.orEmpty()).filter { it.isNotBlank() }.joinToString("  ")
+                    if (line.isNotBlank()) ManaText(line, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                card?.fullOracle?.let { ManaText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp)) }
                 if (!details.isNullOrBlank()) {
                     Text(details, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 8.dp))
                 }

@@ -41,6 +41,7 @@ UI (Compose) → ViewModels → DeckRepository ──► Room (fuente de verdad,
 - **Escritura**: `MoxfieldApiWriter` lee el mazo remoto antes de cada operación (versión `X-Deck-Version` e id de cada carta) y usa las mismas rutas que la web. Las operaciones son idempotentes (cantidades absolutas, mover lo que ya no está no hace nada), así que reintentar no duplica. Un mazo creado en el móvil se crea en Moxfield y se rellena con una importación de texto con las ediciones exactas.
 - **Mazos ajenos**: no se editan; como en Moxfield, se copian.
 - **Imágenes**: `cards.scryfall.io` a partir del `scryfall_id` (caché de 1,5 GB en `filesDir`, Android no la borra). Las miniaturas de las búsquedas usan `assets.moxfield.net` con el `mainCardId`. Con otro idioma de cartas, la misma impresión en ese idioma se busca en Scryfall por lotes y queda en caché.
+- **Símbolos de maná**: costes y textos de reglas (`{2}{U}`, `{T}: añade {G}`) se dibujan como los iconos de las cartas, incluidos híbridos y pirexianos (`ui/common/ManaSymbols.kt`). Los trazados salen de la fuente [Mana](https://github.com/andrewgioia/mana) de Andrew Gioia (SIL OFL 1.1) y van dentro de la app, así que funcionan sin conexión. Los símbolos son propiedad de Wizards of the Coast.
 - **Idiomas**: los textos están en Kotlin (`i18n/Es.kt`, `i18n/En.kt`), así que cambiar de idioma es instantáneo y una traducción que falte no compila.
 
 ### Fútbol y el bloqueo de LaLiga
@@ -130,6 +131,7 @@ Tests unitarios JVM en `app/src/test` (JUnit 4 + `kotlinx-coroutines-test`), sin
 | `data/session/AuthResultTest` | Respuesta de renovación de sesión (token, usuario, caducidad) |
 | `domain/ShareLinkTest` | Enlaces para compartir: ida y vuelta, mazos locales, datos corruptos |
 | `domain/DeckFiltersTest` | Filtros y orden de mazos (colores, comandante, bracket, tipo), campos nuevos de la búsqueda |
+| `ui/common/ManaSymbolsTest` | Símbolos de maná: separar costes y texto, colores, híbridos, pirexianos y símbolos desconocidos |
 | `ui/deck/DeckLayoutTest` | Agrupar y ordenar cartas para las vistas, nombres e imágenes traducidos |
 | `i18n/I18nTest` | Idioma de la app y textos en español/inglés |
 | `data/session/ApiTrafficLogTest` | Registro de API: filtrado, redacción de secretos, duplicados, límite |

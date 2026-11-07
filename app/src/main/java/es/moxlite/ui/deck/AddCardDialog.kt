@@ -58,6 +58,7 @@ import es.moxlite.data.remote.moxfield.Boards
 import es.moxlite.data.remote.scryfall.ScryCard
 import es.moxlite.data.remote.scryfall.ScryfallImages
 import es.moxlite.ui.common.LocalStrings
+import es.moxlite.ui.common.ManaText
 import es.moxlite.ui.common.MessageBox
 
 /**
@@ -187,9 +188,9 @@ private fun SearchResultRow(card: ScryCard, selected: Boolean, onClick: () -> Un
             if (card.displayName != card.name) {
                 Text(card.name, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
-            Text(
+            ManaText(
                 listOfNotNull(
-                    ManaText.plain(card.manaCost.orEmpty()).ifBlank { null },
+                    card.manaCost?.ifBlank { null },
                     card.typeLine,
                 ).joinToString("  "),
                 style = MaterialTheme.typography.labelSmall,

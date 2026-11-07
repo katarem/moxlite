@@ -114,6 +114,7 @@ import es.moxlite.data.settings.DeckSorting
 import es.moxlite.data.settings.DeckViewMode
 import es.moxlite.ui.common.ColorPips
 import es.moxlite.ui.common.LocalStrings
+import es.moxlite.ui.common.ManaText
 import es.moxlite.ui.common.MessageBox
 import es.moxlite.ui.common.SectionHeader
 import es.moxlite.ui.common.appContainer
@@ -617,7 +618,7 @@ private fun TextRow(card: DeckCardEntity, localized: Localized, editing: Boolean
             modifier = Modifier.weight(1f),
         )
         if (editing) QtyButtons(card.quantity, onQty)
-        else Text(ManaText.plain(card.manaCost), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        else ManaText(card.manaCost, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -648,9 +649,9 @@ private fun CardRow(card: DeckCardEntity, localized: Localized, editing: Boolean
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text(card.localName(localized) + if (card.isFoil) " ✦" else "", maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                ManaText.plain(card.manaCost),
-                style = MaterialTheme.typography.labelSmall,
+            ManaText(
+                card.manaCost,
+                style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -720,13 +721,13 @@ private fun FullCardRow(card: DeckCardEntity, localized: Localized, editing: Boo
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
-            Text(
-                listOf(ManaText.plain(card.manaCost), card.typeLine).filter { it.isNotBlank() }.joinToString("  "),
+            ManaText(
+                listOf(card.manaCost, card.typeLine).filter { it.isNotBlank() }.joinToString("  "),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             card.oracleText?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 8, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                ManaText(it, style = MaterialTheme.typography.bodySmall, maxLines = 8, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
             }
             Text(
                 listOfNotNull(card.setCode.uppercase().ifBlank { null }, card.collectorNumber, card.priceEur?.let(::formatEur)).joinToString(" · "),
@@ -786,8 +787,8 @@ private fun CardDetailDialog(
                 }
                 item {
                     Column(Modifier.padding(top = 8.dp)) {
-                        Text("${ManaText.plain(card.manaCost)}  ${card.typeLine}", style = MaterialTheme.typography.labelLarge)
-                        card.oracleText?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
+                        ManaText("${card.manaCost}  ${card.typeLine}".trim(), style = MaterialTheme.typography.labelLarge)
+                        card.oracleText?.let { ManaText(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp)) }
                         Text(
                             listOfNotNull(
                                 card.setCode.uppercase().ifBlank { null },
@@ -907,15 +908,3 @@ private fun PrintingsDialog(
 }
 
 fun formatEur(value: Double): String = String.format(Locale("es", "ES"), "%.2f €", value)
-
-object ManaText {
-    /** "{2}{U}{B}" → "2UB"; "{W/U}" → "(W/U)". */
-    fun plain(cost: String): String = cost.replace("}{", " ").replace("{", "").replace("}", "")
-        .split(" ").joinToString("") {
-            when {
-                it == "//" -> " // "
-                it.length > 1 && it.any { c -> !c.isDigit() } -> "($it)"
-                else -> it
-            }
-        }
-}
