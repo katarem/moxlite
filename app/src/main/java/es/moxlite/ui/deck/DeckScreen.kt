@@ -113,6 +113,7 @@ import es.moxlite.data.settings.DeckGrouping
 import es.moxlite.data.settings.DeckSorting
 import es.moxlite.data.settings.DeckViewMode
 import es.moxlite.ui.common.ColorPips
+import es.moxlite.ui.common.DeckMetaText
 import es.moxlite.ui.common.LocalStrings
 import es.moxlite.ui.common.ManaText
 import es.moxlite.ui.common.MessageBox
@@ -537,11 +538,9 @@ private fun DeckHeader(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     ColorPips(deck.colorIdentity, size = 14)
                     Spacer(Modifier.width(8.dp))
-                    Text(
-                        listOfNotNull(
-                            LocalStrings.current.formatLabel(deck.format).ifBlank { null },
-                            deck.bracket?.let { "Bracket $it" },
-                        ).joinToString(" · "),
+                    DeckMetaText(
+                        leading = LocalStrings.current.formatLabel(deck.format),
+                        bracket = deck.bracket,
                         style = MaterialTheme.typography.labelLarge,
                     )
                 }

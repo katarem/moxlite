@@ -89,17 +89,12 @@ fun DeckRow(deck: DeckRowData, onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 ColorPips(deck.colors)
                 Spacer(Modifier.width(6.dp))
-                Text(
-                    listOf(
-                        deck.format.ifBlank { null }?.let { LocalStrings.current.formatLabel(it) },
-                        deck.bracket?.let { "B$it" },
-                        deck.author.ifBlank { null }?.let { "@$it" },
-                    )
-                        .filterNotNull().joinToString(" · "),
+                DeckMetaText(
+                    leading = deck.format.ifBlank { null }?.let { LocalStrings.current.formatLabel(it) },
+                    bracket = deck.bracket,
+                    trailing = deck.author.ifBlank { null }?.let { "@$it" },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
