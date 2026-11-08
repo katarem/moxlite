@@ -68,4 +68,13 @@ class ManaSymbolsTest {
         assertEquals(Fallback("HW"), ManaSymbolSpec.of("HW"))
         assertEquals(Fallback("25"), ManaSymbolSpec.of("25"))
     }
+
+    @Test
+    fun `colorless glyph is drawn larger than the colors`() {
+        val colorless = ManaSymbolSpec.of("C") as ManaSymbolSpec.Single
+        val white = ManaSymbolSpec.of("W") as ManaSymbolSpec.Single
+        assertEquals("C", colorless.glyph)
+        assertEquals(ManaSymbolSpec.Generic, colorless.background)
+        assertTrue(colorless.scale > white.scale)
+    }
 }
