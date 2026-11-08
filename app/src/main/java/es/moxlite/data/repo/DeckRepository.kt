@@ -250,7 +250,31 @@ class DeckRepository(
         if (text.isBlank()) emptyList() else moxfield.searchUsers(text.trim()).data
     }
 
-    suspend fun followUser(user: MoxAuthorDto) = users.upsert(FollowedUserEntity(user.userName, user.displayName))
+    /** The search result says whether the user has an avatar, so it is stored as found (blank = none). */
+    suspend fun followUser(user: MoxAuthorDto) = users.upsert(
+        FollowedUserEntity(user.userName, user.displayName, profileImageUrl = user.profileImageUrl?.trim().orEmpty()),
+    )
+
+    /**
+     * Fetches the avatar of followed users that have never had it looked up (followed with older
+     * versions of the app). A user Moxfield does not return or returns without avatar is stored as
+     * blank, so it is not asked again.
+     */
+    suspend fun refreshMissingAvatars() {
+        for (followed in users.getWithoutAvatar()) {
+            val found = try {
+                searchUsers(followed.userName).firstOrNull { it.userName.equals(followed.userName, ignoreCase = true) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Offline or blocked by Cloudflare: the rest would fail the same way. Retried next time.
+                return
+            }
+            users.setAvatar(followed.userName, found?.profileImageUrl?.trim().orEmpty())
+            delay(300)
+        }
+    }
+
     suspend fun unfollowUser(userName: String) = users.delete(userName)
 
     // ---------- Offline e idiomas ----------

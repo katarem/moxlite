@@ -13,7 +13,7 @@ Cliente Android personal para Moxfield: consultar y gestionar mazos **con y sin 
 | "Mis mazos" por pestañas (míos, guardados, recientes) con buscador, filtros y orden | ✅ |
 | **Subir cambios a Moxfield**: crear, importar, añadir, cantidades, mover, quitar, renombrar, cambiar arte | ✅ (rutas de la web, sin probar en vivo, ver abajo) |
 | Ver cualquier mazo público (por enlace, búsqueda o usuario), con miniatura en las listas | ✅ |
-| Buscar mazos con filtros (formato, colores, comandante, bracket, tipo) y orden (actualizados, nuevos, populares, vistos) | ✅ |
+| Buscar mazos con filtros (formato, precon, colores, comandante, bracket, tipo) y orden (actualizados, nuevos, populares, vistos) | ✅ |
 | Vistas del mazo: texto, lista, cuadrícula y carta completa; agrupar por tipo/coste/color y ordenar | ✅ |
 | Añadir cartas con buscador con imágenes y en cualquier idioma ("rayo" o "lightning bolt") | ✅ |
 | Elegir arte / edición de cada carta | ✅ |
@@ -22,7 +22,7 @@ Cliente Android personal para Moxfield: consultar y gestionar mazos **con y sin 
 | Bloqueo de LaLiga a Cloudflare: aviso claro, cola que se sube sola después y proxy opcional | ✅ |
 | Idioma de la app (español / inglés) e idioma de las cartas (imágenes y nombres) | ✅ |
 | Copiar mazos ajenos, crear mazos, importar/exportar listas de texto | ✅ |
-| Buscar usuarios, seguirlos y ver sus mazos públicos | ✅ |
+| Buscar usuarios, seguirlos (con su avatar) y buscar y filtrar en sus mazos públicos | ✅ |
 | **Asistente EDHREC**: construir un mazo de Commander (o mejorar uno tuyo) con sugerencias, objetivos por función y autocompletado | ✅ (nuevo, ver abajo) |
 
 ## Cómo funciona
@@ -130,7 +130,7 @@ Tests unitarios JVM en `app/src/test` (JUnit 4 + `kotlinx-coroutines-test`), sin
 | `data/sync/WriteParsingTest` | Respuestas de búsqueda de cartas de Moxfield, nombres, errores de escritura |
 | `data/session/AuthResultTest` | Respuesta de renovación de sesión (token, usuario, caducidad) |
 | `domain/ShareLinkTest` | Enlaces para compartir: ida y vuelta, mazos locales, datos corruptos |
-| `domain/DeckFiltersTest` | Filtros y orden de mazos (colores, comandante, bracket, tipo), campos nuevos de la búsqueda |
+| `domain/DeckFiltersTest` | Filtros y orden de mazos (colores, comandante, bracket, tipo, precon), consulta a Moxfield, campos nuevos de la búsqueda |
 | `ui/common/ManaSymbolsTest` | Símbolos de maná: separar costes y texto, colores, híbridos, pirexianos y símbolos desconocidos |
 | `ui/deck/DeckLayoutTest` | Agrupar y ordenar cartas para las vistas, nombres e imágenes traducidos |
 | `i18n/I18nTest` | Idioma de la app y textos en español/inglés |

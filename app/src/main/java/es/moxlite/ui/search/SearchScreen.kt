@@ -126,7 +126,7 @@ class DeckSearchViewModel(
             var added = 0
             do {
                 val page = _state.value.page + 1
-                val result = repo.searchDecks(queryFor(filters, commanderId, page, pageSize))
+                val result = repo.searchDecks(filters.toRemoteQuery(base, commanderId, page, pageSize))
                 val matching = result.data.filter { it.publicId.isNotBlank() && filters.matchesSummary(it) }
                 // Solo escribe este job (search() cancela el anterior antes de empezar).
                 val before = _state.value
@@ -143,19 +143,6 @@ class DeckSearchViewModel(
             _state.update { it.copy(loading = false, error = e.userMessage()) }
         }
     }
-
-    private fun queryFor(f: DeckFilters, commanderId: String?, page: Int, pageSize: Int) = base.copy(
-        text = f.text,
-        format = f.format ?: base.format,
-        commanderCardId = commanderId,
-        minBracket = f.bracket,
-        maxBracket = f.bracket,
-        hubName = f.hub,
-        sortType = f.sort.remoteKey ?: base.sortType,
-        sortDirection = "descending",
-        pageNumber = page,
-        pageSize = pageSize,
-    )
 
     private companion object {
         const val MIN_NEW_RESULTS = 20
@@ -230,53 +217,89 @@ fun SearchScreen(openDeck: (String) -> Unit) {
     val t = LocalStrings.current
     val vm: DeckSearchViewModel = viewModel { DeckSearchViewModel(container.deckRepository) }
     val state by vm.state.collectAsStateWithLifecycle()
+
+    Scaffold(topBar = { TopAppBar(title = { Text(t.searchDecks) }) }) { padding ->
+        DeckSearchContent(
+            state = state,
+            placeholder = t.searchDecksPlaceholder,
+            emptyText = if (state.filters.activeCount > 0) t.noDecksMatch else null,
+            onSearch = vm::search,
+            onLoadMore = vm::loadMore,
+            onRetry = vm::retry,
+            openDeck = openDeck,
+            commanderSuggestions = { container.cardRepository.commanderSuggestionsSafe(it) },
+            modifier = Modifier.padding(padding),
+            intro = t.searchDecksIntro,
+        )
+    }
+}
+
+/**
+ * Search box, filters and paginated results of a [DeckSearchViewModel]. Used by the Moxfield deck
+ * search and by a user's decks.
+ *
+ * @param intro shown instead of the results until the first search; null if the screen searches
+ * on its own when it opens.
+ */
+@Composable
+fun DeckSearchContent(
+    state: DeckListState,
+    placeholder: String,
+    emptyText: String?,
+    onSearch: (DeckFilters) -> Unit,
+    onLoadMore: () -> Unit,
+    onRetry: () -> Unit,
+    openDeck: (String) -> Unit,
+    commanderSuggestions: suspend (String) -> List<Pair<String, String>>,
+    modifier: Modifier = Modifier,
+    intro: String? = null,
+) {
+    val t = LocalStrings.current
     var text by rememberSaveable { mutableStateOf(state.filters.text) }
     val filters = state.filters
 
-    Scaffold(topBar = { TopAppBar(title = { Text(t.searchDecks) }) }) { padding ->
-        Column(Modifier.padding(padding)) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                placeholder = { Text(t.searchDecksPlaceholder) },
-                leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                trailingIcon = {
-                    if (text.isNotEmpty()) {
-                        IconButton(onClick = { text = ""; if (state.searched) vm.search(filters.copy(text = "")) }) {
-                            Icon(Icons.Outlined.Close, t.clear)
-                        }
+    Column(modifier) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            placeholder = { Text(placeholder) },
+            leadingIcon = { Icon(Icons.Outlined.Search, null) },
+            trailingIcon = {
+                if (text.isNotEmpty()) {
+                    IconButton(onClick = { text = ""; if (state.searched && filters.text.isNotEmpty()) onSearch(filters.copy(text = "")) }) {
+                        Icon(Icons.Outlined.Close, t.clear)
                     }
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { vm.search(filters.copy(text = text)) }),
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                }
+            },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { onSearch(filters.copy(text = text)) }),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        )
+        DeckFilterBar(
+            filters = filters,
+            sorts = DeckSort.REMOTE,
+            onChange = { onSearch(it.copy(text = text)) },
+            commanderSuggestions = commanderSuggestions,
+        )
+        if (filters.needsClientFilter && state.searched) {
+            Text(
+                t.searchDecksColorsHint,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp),
             )
-            DeckFilterBar(
-                filters = filters,
-                sorts = DeckSort.REMOTE,
-                onChange = { vm.search(it.copy(text = text)) },
-                commanderSuggestions = { container.cardRepository.commanderSuggestionsSafe(it) },
+        }
+        if (!state.searched && intro != null) {
+            MessageBox(intro, isError = false)
+        } else {
+            DeckResultsList(
+                state = state,
+                openDeck = openDeck,
+                onLoadMore = onLoadMore,
+                onRetry = onRetry,
+                emptyText = emptyText,
             )
-            if (filters.needsClientFilter && state.searched) {
-                Text(
-                    t.searchDecksColorsHint,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-            }
-            if (!state.searched) {
-                MessageBox(t.searchDecksIntro, isError = false)
-            } else {
-                DeckResultsList(
-                    state = state,
-                    openDeck = openDeck,
-                    onLoadMore = { vm.loadMore() },
-                    onRetry = { vm.retry() },
-                    emptyText = if (filters.activeCount > 0) t.noDecksMatch else null,
-                )
-            }
         }
     }
 }

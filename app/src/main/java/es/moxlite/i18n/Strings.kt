@@ -5,6 +5,7 @@ import es.moxlite.data.settings.DeckSorting
 import es.moxlite.data.settings.DeckViewMode
 import es.moxlite.domain.ColorMatch
 import es.moxlite.domain.DeckSort
+import es.moxlite.domain.PreconType
 
 /** Todos los textos de la app. Implementaciones: [Es] (por defecto) y [En]. */
 interface Strings {
@@ -192,6 +193,8 @@ interface Strings {
     fun commanderNotFound(name: String): String
     val filterBracket: String
     fun bracketLabel(bracket: Int): String
+    val filterPrecon: String
+    fun preconLabel(type: PreconType): String
     val filterHub: String
     val hubPlaceholder: String
     val anyOption: String
@@ -214,6 +217,7 @@ interface Strings {
     val follow: String
     val unfollow: String
     fun userHasNoPublicDecks(user: String): String
+    fun searchUserDecksPlaceholder(user: String): String
 
     // Importar
     val importList: String

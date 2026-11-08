@@ -129,6 +129,8 @@ data class FollowedUserEntity(
     @PrimaryKey val userName: String,
     val displayName: String = "",
     val addedAt: Long = System.currentTimeMillis(),
+    /** Moxfield avatar URL; null = not looked up yet (followed with an older version), blank = none. */
+    val profileImageUrl: String? = null,
 )
 
 /**

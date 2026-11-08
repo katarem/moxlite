@@ -1,5 +1,6 @@
 package es.moxlite.i18n
 
+import es.moxlite.domain.PreconType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertSame
@@ -37,5 +38,16 @@ class I18nTest {
         assertEquals("Español", Es.cardLanguageName("es"))
         assertEquals("Spanish", En.cardLanguageName("es"))
         assertEquals("zz", En.cardLanguageName("zz"))
+    }
+
+    @Test
+    fun `precon formats and kinds have labels in both languages`() {
+        assertEquals("Precon de Commander", Es.formatLabel("commanderPrecons"))
+        assertEquals("Commander precon", En.formatLabel("commanderPrecons"))
+        assertEquals("Precon", Es.formatLabel("precons"))
+        PreconType.entries.forEach {
+            assertNotEquals(Es.preconLabel(it), En.preconLabel(it))
+        }
+        assertEquals("Buscar en los mazos de @pepe", Es.searchUserDecksPlaceholder("pepe"))
     }
 }
