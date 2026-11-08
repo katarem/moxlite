@@ -183,109 +183,114 @@ fun DeckScreen(
     }
 
     val d = deck
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(d?.name ?: t.deck, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, t.back) } },
-                actions = {
-                    if (d != null && !d.isLocalOnly) {
-                        IconButton(onClick = { vm.toggleSaved() }) {
-                            Icon(
-                                if (d.isSaved) Icons.Filled.DownloadForOffline else Icons.Outlined.DownloadForOffline,
-                                contentDescription = if (d.isSaved) t.savedOffline else t.saveOffline,
-                                tint = if (d.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, t.refresh) }
-                    }
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, t.more) }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        if (d != null) {
-                            MenuItem(t.shareLink, Icons.Outlined.Link) { menu = false; vm.shareLink() }
-                            MenuItem(t.copyCode, Icons.Outlined.QrCode) { menu = false; vm.copyCode() }
-                            MenuItem(t.exportText, Icons.Outlined.Share) { menu = false; dialog = "export" }
-                            MenuItem(t.copyDeck, Icons.Outlined.ContentCopy) { menu = false; dialog = "copy" }
-                            if (canEdit) MenuItem(t.rename, Icons.Outlined.Edit) { menu = false; dialog = "rename" }
-                            if (canEdit && d.format.equals("commander", ignoreCase = true)) {
-                                MenuItem(t.edhImproveDeck, Icons.Outlined.AutoAwesome) { menu = false; openBuilder(d.publicId) }
-                            }
-                        }
+    // "Add card" is drawn on top inside the activity window: as a Dialog, its window ignored the
+    // navigation bar on some phones and the "Add" button was cut off at the bottom.
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(d?.name ?: t.deck, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, t.back) } },
+                    actions = {
                         if (d != null && !d.isLocalOnly) {
-                            MenuItem(t.viewOnMoxfieldWeb, Icons.Outlined.OpenInBrowser) {
-                                menu = false; openWeb(MoxfieldIds.deckUrl(d.publicId))
+                            IconButton(onClick = { vm.toggleSaved() }) {
+                                Icon(
+                                    if (d.isSaved) Icons.Filled.DownloadForOffline else Icons.Outlined.DownloadForOffline,
+                                    contentDescription = if (d.isSaved) t.savedOffline else t.saveOffline,
+                                    tint = if (d.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, t.refresh) }
+                        }
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, t.more) }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            if (d != null) {
+                                MenuItem(t.shareLink, Icons.Outlined.Link) { menu = false; vm.shareLink() }
+                                MenuItem(t.copyCode, Icons.Outlined.QrCode) { menu = false; vm.copyCode() }
+                                MenuItem(t.exportText, Icons.Outlined.Share) { menu = false; dialog = "export" }
+                                MenuItem(t.copyDeck, Icons.Outlined.ContentCopy) { menu = false; dialog = "copy" }
+                                if (canEdit) MenuItem(t.rename, Icons.Outlined.Edit) { menu = false; dialog = "rename" }
+                                if (canEdit && d.format.equals("commander", ignoreCase = true)) {
+                                    MenuItem(t.edhImproveDeck, Icons.Outlined.AutoAwesome) { menu = false; openBuilder(d.publicId) }
+                                }
+                            }
+                            if (d != null && !d.isLocalOnly) {
+                                MenuItem(t.viewOnMoxfieldWeb, Icons.Outlined.OpenInBrowser) {
+                                    menu = false; openWeb(MoxfieldIds.deckUrl(d.publicId))
+                                }
+                            }
+                            if (d?.authorUserName?.isNotBlank() == true) {
+                                MenuItem(t.moreDecksBy(d.authorUserName), Icons.Outlined.Person) { menu = false; openUser(d.authorUserName) }
+                            }
+                            if (d?.hasLocalChanges == true && !d.isLocalOnly) {
+                                MenuItem(t.discardLocalChanges, Icons.Outlined.Restore) { menu = false; dialog = "discard" }
+                            }
+                            MenuItem(t.removeFromPhone, Icons.Outlined.DeleteOutline) { menu = false; dialog = "remove" }
+                        }
+                    },
+                )
+            },
+            floatingActionButton = {
+                if (d != null && (cards.isNotEmpty() || d.isFullyLoaded)) {
+                    if (canEdit) {
+                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            if (editing) {
+                                SmallFloatingActionButton(onClick = { dialog = "add" }) { Icon(Icons.Outlined.Add, t.addCard) }
+                            }
+                            FloatingActionButton(onClick = { editingRequested = !editingRequested }) {
+                                Icon(if (editing) Icons.Outlined.Check else Icons.Outlined.Edit, if (editing) t.finishEditing else t.edit)
                             }
                         }
-                        if (d?.authorUserName?.isNotBlank() == true) {
-                            MenuItem(t.moreDecksBy(d.authorUserName), Icons.Outlined.Person) { menu = false; openUser(d.authorUserName) }
-                        }
-                        if (d?.hasLocalChanges == true && !d.isLocalOnly) {
-                            MenuItem(t.discardLocalChanges, Icons.Outlined.Restore) { menu = false; dialog = "discard" }
-                        }
-                        MenuItem(t.removeFromPhone, Icons.Outlined.DeleteOutline) { menu = false; dialog = "remove" }
+                    } else {
+                        // Mazo ajeno: como en Moxfield, se copia para editarlo.
+                        ExtendedFloatingActionButton(
+                            onClick = { dialog = "copy" },
+                            icon = { Icon(Icons.Outlined.ContentCopy, null) },
+                            text = { Text(t.copyToEdit) },
+                        )
                     }
-                },
-            )
-        },
-        floatingActionButton = {
-            if (d != null && (cards.isNotEmpty() || d.isFullyLoaded)) {
-                if (canEdit) {
-                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (editing) {
-                            SmallFloatingActionButton(onClick = { dialog = "add" }) { Icon(Icons.Outlined.Add, t.addCard) }
-                        }
-                        FloatingActionButton(onClick = { editingRequested = !editingRequested }) {
-                            Icon(if (editing) Icons.Outlined.Check else Icons.Outlined.Edit, if (editing) t.finishEditing else t.edit)
-                        }
+                }
+            },
+            snackbarHost = { SnackbarHost(snackbar) },
+        ) { padding ->
+            Column(Modifier.padding(padding).fillMaxSize()) {
+                if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                when {
+                    d != null && (cards.isNotEmpty() || d.isFullyLoaded) -> DeckContent(
+                        deck = d,
+                        cards = cards,
+                        localized = localized,
+                        editing = editing,
+                        viewMode = viewMode,
+                        grouping = grouping,
+                        sorting = sorting,
+                        onViewMode = container.settings::setViewMode,
+                        onGrouping = container.settings::setGrouping,
+                        onSorting = container.settings::setSorting,
+                        onCardClick = { selected = it },
+                        onQty = vm::setQuantity,
+                        openUser = openUser,
+                        needsLogin = d.hasLocalChanges && !session.hasAccount,
+                        openLogin = openLogin,
+                    )
+                    loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    error != null -> {
+                        val e = error!!
+                        MessageBox(
+                            text = e.userMessage(),
+                            actionLabel = if (e is MoxError.CloudflareBlocked) t.openMoxfieldInApp else t.retry,
+                            onAction = {
+                                if (e is MoxError.CloudflareBlocked) openWeb(MoxfieldIds.deckUrl(publicId)) else vm.refresh()
+                            },
+                        )
                     }
-                } else {
-                    // Mazo ajeno: como en Moxfield, se copia para editarlo.
-                    ExtendedFloatingActionButton(
-                        onClick = { dialog = "copy" },
-                        icon = { Icon(Icons.Outlined.ContentCopy, null) },
-                        text = { Text(t.copyToEdit) },
-                    )
+                    // Mientras Room responde o el mazo cambia de id (recién subido a Moxfield):
+                    // nunca una pantalla en blanco.
+                    else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 }
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            when {
-                d != null && (cards.isNotEmpty() || d.isFullyLoaded) -> DeckContent(
-                    deck = d,
-                    cards = cards,
-                    localized = localized,
-                    editing = editing,
-                    viewMode = viewMode,
-                    grouping = grouping,
-                    sorting = sorting,
-                    onViewMode = container.settings::setViewMode,
-                    onGrouping = container.settings::setGrouping,
-                    onSorting = container.settings::setSorting,
-                    onCardClick = { selected = it },
-                    onQty = vm::setQuantity,
-                    openUser = openUser,
-                    needsLogin = d.hasLocalChanges && !session.hasAccount,
-                    openLogin = openLogin,
-                )
-                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                error != null -> {
-                    val e = error!!
-                    MessageBox(
-                        text = e.userMessage(),
-                        actionLabel = if (e is MoxError.CloudflareBlocked) t.openMoxfieldInApp else t.retry,
-                        onAction = {
-                            if (e is MoxError.CloudflareBlocked) openWeb(MoxfieldIds.deckUrl(publicId)) else vm.refresh()
-                        },
-                    )
-                }
-                // Mientras Room responde o el mazo cambia de id (recién subido a Moxfield):
-                // nunca una pantalla en blanco.
-                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
         }
+        if (dialog == "add") AddCardScreen(vm = vm, onDismiss = { dialog = null; vm.clearSearch() })
     }
 
     selected?.let { card ->
@@ -353,7 +358,6 @@ fun DeckScreen(
             onDismiss = { dialog = null },
             onConfirm = { dialog = null; vm.removeFromDevice() },
         )
-        "add" -> AddCardDialog(vm = vm, onDismiss = { dialog = null; vm.clearSearch() })
     }
 }
 
