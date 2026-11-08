@@ -332,13 +332,23 @@ object Es : Strings {
     override val openMoxfieldInAppHint = "Para pasar la verificación de Cloudflare o usar funciones que la app aún no tiene"
     override val moxfieldWeb = "Moxfield web"
     override val apiLog = "Registro de API"
-    override val apiLogHint = "Llamadas que hace la web de Moxfield (para depurar)"
+    override val apiLogHint = "Llamadas que hace la web de Moxfield abierta en la app (no las de la sincronización)"
     override val apiLogInstructions =
         "Aquí se ven las llamadas a la API que hace la web de Moxfield abierta dentro de la app (método, URL y cuerpo, " +
             "sin tokens ni contraseñas). Sirve para depurar o para descubrir cambios en la API."
     override val shareLog = "Compartir registro"
     override val showReadsToo = "Mostrar también lecturas (GET)"
     override val onlyWrites = "Solo escrituras"
+
+    override val diagnostics = "Registro de diagnóstico"
+    override val diagnosticsHint = "Sincronización, llamadas de la app a Moxfield y errores, para exportarlo y analizarlo"
+    override val diagnosticsInstructions =
+        "Aquí queda lo que hace la propia app: cada sincronización, cada llamada a la API de Moxfield con su respuesta, " +
+            "las renovaciones de sesión y los cierres inesperados. Se conserva aunque cierres la app. «Exportar informe» " +
+            "crea un fichero con el estado actual (sesión, tareas en segundo plano y cambios pendientes) y todo el registro, " +
+            "sin tokens, cookies ni contraseñas."
+    override val exportDiagnostics = "Exportar informe"
+    override val diagnosticsEmpty = "Aún no hay nada registrado."
 
     override val settings = "Ajustes"
     override val languages = "Idiomas"

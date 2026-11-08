@@ -238,6 +238,13 @@ interface Strings {
     val showReadsToo: String
     val onlyWrites: String
 
+    // Diagnostics
+    val diagnostics: String
+    val diagnosticsHint: String
+    val diagnosticsInstructions: String
+    val exportDiagnostics: String
+    val diagnosticsEmpty: String
+
     // Ajustes
     val settings: String
     val languages: String

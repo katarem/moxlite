@@ -71,7 +71,12 @@ import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openAccount: () -> Unit) {
+fun SettingsScreen(
+    openWeb: (WebMode) -> Unit,
+    openApiLog: () -> Unit,
+    openDiagnostics: () -> Unit,
+    openAccount: () -> Unit,
+) {
     val container = appContainer()
     val t = LocalStrings.current
     val context = LocalContext.current
@@ -196,6 +201,13 @@ fun SettingsScreen(openWeb: (WebMode) -> Unit, openApiLog: () -> Unit, openAccou
                     headlineContent = { Text(t.apiLog) },
                     supportingContent = { Text(t.apiLogHint) },
                     modifier = Modifier.clickable(onClick = openApiLog),
+                )
+            }
+            item {
+                ListItem(
+                    headlineContent = { Text(t.diagnostics) },
+                    supportingContent = { Text(t.diagnosticsHint) },
+                    modifier = Modifier.clickable(onClick = openDiagnostics),
                 )
             }
 

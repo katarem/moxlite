@@ -4,10 +4,14 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.util.Log
 import coil.ImageLoader
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import es.moxlite.data.builder.BuilderRepository
+import es.moxlite.data.diagnostics.DiagnosticLog
+import es.moxlite.data.diagnostics.DiagnosticsCollector
+import es.moxlite.data.diagnostics.DiagnosticsInterceptor
 import es.moxlite.data.local.AppDatabase
 import es.moxlite.data.remote.Http
 import es.moxlite.data.remote.MoxError
@@ -60,6 +64,12 @@ class AppContainer(private val context: Context) {
     /** Ámbito de la app (vive lo que vive el proceso). */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
+    /** What the app itself does (sync, API calls, crashes), exportable from Settings. */
+    val diagnostics = DiagnosticLog(
+        file = context.filesDir.resolve("diagnostics/diagnostic.log"),
+        echo = { level, tag, message -> Log.println(level.priority, "Moxlite/$tag", message) },
+    )
+
     val settings = AppSettings(context)
     val session = SessionManager(context)
     val apiLog = ApiTrafficLog()
@@ -88,12 +98,13 @@ class AppContainer(private val context: Context) {
         .proxySelector(proxySelector)
         .build()
 
-    val auth = MoxfieldAuth(session, baseClient)
+    val auth = MoxfieldAuth(session, baseClient, diagnostics)
 
     /** Cliente para api2.moxfield.com: cabeceras de navegador + cookies del WebView + token. */
     private val moxfieldClient = baseClient.newBuilder()
         .cookieJar(WebViewCookieJar())
         .addInterceptor(Interceptor { chain -> moxfieldCall(chain) })
+        .addInterceptor(DiagnosticsInterceptor(diagnostics))
         .addInterceptor(logging)
         .build()
 
@@ -104,6 +115,7 @@ class AppContainer(private val context: Context) {
         var response = proceed(chain, authorized(chain.request()))
         if (response.code == 401 && session.state.value.hasAccount) {
             response.close()
+            diagnostics.w(AUTH_TAG, "401 from ${chain.request().url.encodedPath}: renewing the token")
             session.dropAccessToken()
             if (auth.refreshBlocking(force = true)) response = proceed(chain, authorized(chain.request()))
             else return failWith(response, MoxError.Unauthorized())
@@ -214,10 +226,13 @@ class AppContainer(private val context: Context) {
         cards = cardRepository,
         db = database,
         session = session,
-        writer = MoxfieldApiWriter(moxfieldService, session),
+        writer = MoxfieldApiWriter(moxfieldService, session, diagnostics),
         imageLoader = imageLoader,
         settings = settings,
+        log = diagnostics,
     )
+
+    val diagnosticsCollector = DiagnosticsCollector(context, diagnostics, session, settings, connectivity, deckRepository)
 
     /** Asistente de construcción de mazos con EDHREC. */
     val builderRepository = BuilderRepository(
@@ -226,6 +241,10 @@ class AppContainer(private val context: Context) {
         decks = deckRepository,
         dir = context.filesDir.resolve("builder"),
     )
+
+    private companion object {
+        const val AUTH_TAG = "Auth"
+    }
 
     init {
         I18n.apply(settings.appLanguage.value)

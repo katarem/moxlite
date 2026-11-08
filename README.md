@@ -85,6 +85,12 @@ Todo se guarda solo: se puede salir y seguir más tarde. Si el mazo que se estab
 
 Las rutas de escritura son las que usa la web de Moxfield (sacadas de su código por proyectos de la comunidad, ver [`docs/moxfield-api.md`](docs/moxfield-api.md)); PUT/DELETE de cantidades están confirmados por una extensión en uso. No se han podido probar contra una cuenta real desde aquí. Si una operación falla, queda en **Cuenta → Cambios pendientes** con el error, se puede descartar, y el **Registro de API** (Ajustes) enseña qué llamadas hace la web para corregir la ruta.
 
+### Diagnostics
+
+**Settings → Diagnostic log** records what the app itself does, and keeps it across restarts (up to ~1 MB, rotated): every sync run (when WorkManager starts it, each queued change and its outcome, why the push stopped), every request the app sends to the Moxfield API with its status, duration, request body and the start of the error response, token renewals and uncaught crashes. The **API log** only shows the traffic of the Moxfield website opened in the WebView, so it never shows sync calls.
+
+**Export report** shares a `.txt` file with the current state (app and Android version, session flags, battery and standby restrictions, the state of each WorkManager job with its attempts and next run, the queue of pending changes with their last error, decks with local changes) followed by the whole log. Tokens, cookies and passwords are redacted before anything is written or exported.
+
 ## Descargar
 
 Cada merge en `main` publica automáticamente una versión nueva en
@@ -144,6 +150,7 @@ Tests unitarios JVM en `app/src/test` (JUnit 4 + `kotlinx-coroutines-test`), sin
 app/src/main/java/es/moxlite/
 ├── AppContainer.kt          # Dependencias, clientes HTTP, Coil
 ├── data/
+│   ├── diagnostics/         # Persistent diagnostic log, HTTP logging and exportable report
 │   ├── local/               # Room: mazos, cartas, cola, usuarios seguidos
 │   ├── remote/moxfield/     # API de Moxfield (DTOs tolerantes)
 │   ├── remote/scryfall/     # API de Scryfall + URLs de imagen

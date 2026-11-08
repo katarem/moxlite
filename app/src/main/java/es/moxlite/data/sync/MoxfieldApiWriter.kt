@@ -1,5 +1,6 @@
 package es.moxlite.data.sync
 
+import es.moxlite.data.diagnostics.DiagnosticLog
 import es.moxlite.data.local.DeckCardEntity
 import es.moxlite.data.local.DeckEntity
 import es.moxlite.data.remote.Http
@@ -40,19 +41,29 @@ import retrofit2.Response
 class MoxfieldApiWriter(
     private val api: MoxfieldService,
     private val session: SessionManager,
+    private val log: DiagnosticLog,
 ) : MoxfieldWriter {
 
     override val isAvailable: Boolean get() = session.state.value.hasAccount
 
     override suspend fun apply(deck: DeckEntity, op: DeckOp, cards: List<DeckCardEntity>): WriteResult =
         withContext(Dispatchers.IO) {
-            if (!isAvailable) return@withContext WriteResult.NotSupported
+            if (!isAvailable) {
+                log.w(TAG, "${op.typeName} on ${deck.publicId} not sent: no Moxfield account")
+                return@withContext WriteResult.NotSupported
+            }
             if (op is DeckOp.CreateDeck) return@withContext create(deck, op, cards)
             // Un mazo local primero tiene que crearse (su CreateDeck va antes en la cola).
-            if (deck.isLocalOnly) return@withContext WriteResult.NotSupported
+            if (deck.isLocalOnly) {
+                log.w(TAG, "${op.typeName} on ${deck.publicId} waits: the deck has not been created in Moxfield yet")
+                return@withContext WriteResult.NotSupported
+            }
 
             val remote = api.deck(deck.publicId)
-            if (!isMine(remote)) throw MoxError.NotOwner()
+            if (!isMine(remote)) {
+                log.w(TAG, "${deck.publicId} is not owned by the signed-in account (author=${remote.createdByUser?.userName}, authors=${remote.authors.size})")
+                throw MoxError.NotOwner()
+            }
             when (op) {
                 is DeckOp.SetQuantity -> setQuantity(remote, op)
                 is DeckOp.MoveCard -> move(remote, op)
@@ -78,6 +89,7 @@ class MoxfieldApiWriter(
     // ---------- Operaciones ----------
 
     private suspend fun create(deck: DeckEntity, op: DeckOp.CreateDeck, cards: List<DeckCardEntity>): WriteResult {
+        log.i(TAG, "Creating ${deck.publicId} in Moxfield (format=${deck.format.ifBlank { op.format }}, cards=${cards.size}, copiedFrom=${op.copiedFrom})")
         val response = api.createDeck(
             CreateDeckBody(
                 name = deck.name.ifBlank { op.name },
@@ -89,6 +101,7 @@ class MoxfieldApiWriter(
         val created = parseObject(ok(response)) ?: throw MoxError.WriteRejected(response.code(), "sin respuesta")
         val publicId = created.str("publicId") ?: throw MoxError.WriteRejected(response.code(), "sin publicId")
         val remoteId = created.str("id") ?: api.deck(publicId).id
+        log.i(TAG, "${deck.publicId} created in Moxfield as $publicId; importing its cards")
 
         if (cards.isNotEmpty()) {
             val text = importText(cards)
@@ -96,6 +109,7 @@ class MoxfieldApiWriter(
             val first = api.importText(remoteId, publicId, version?.toString(), ImportBody(text))
             if (!first.isSuccessful) {
                 // Puede que la versión no fuera la esperada: se relee y se reintenta una vez.
+                log.w(TAG, "Import into $publicId rejected with HTTP ${first.code()}: retrying once with a fresh version")
                 first.errorBody()?.close()
                 val fresh = api.deck(publicId)
                 ok(api.importText(remoteId, publicId, fresh.version.toString(), ImportBody(text)))
@@ -103,6 +117,7 @@ class MoxfieldApiWriter(
                 first.body()?.close()
             }
         }
+        log.i(TAG, "${deck.publicId} uploaded as $publicId")
         return WriteResult.Created(publicId, remoteId)
     }
 
@@ -226,6 +241,8 @@ class MoxfieldApiWriter(
         includePrintings = true,
     )
 }
+
+private const val TAG = "Writer"
 
 /** Partes puras (testeables) del escritor. */
 object WriteParsing {
