@@ -332,13 +332,23 @@ object En : Strings {
     override val openMoxfieldInAppHint = "To pass Cloudflare's check or use features the app doesn't have yet"
     override val moxfieldWeb = "Moxfield web"
     override val apiLog = "API log"
-    override val apiLogHint = "Calls made by the Moxfield website (for debugging)"
+    override val apiLogHint = "Calls made by the Moxfield website opened in the app (not the ones made by sync)"
     override val apiLogInstructions =
         "Shows the API calls made by the Moxfield website opened inside the app (method, URL and body, " +
             "without tokens or passwords). Useful for debugging or spotting API changes."
     override val shareLog = "Share log"
     override val showReadsToo = "Show reads (GET) too"
     override val onlyWrites = "Writes only"
+
+    override val diagnostics = "Diagnostic log"
+    override val diagnosticsHint = "Sync, the app's calls to Moxfield and errors, to export and analyse"
+    override val diagnosticsInstructions =
+        "Records what the app itself does: every sync, every call to the Moxfield API with its response, " +
+            "session renewals and crashes. It is kept when the app is closed. \"Export report\" creates a file with " +
+            "the current state (session, background work and pending changes) and the whole log, " +
+            "without tokens, cookies or passwords."
+    override val exportDiagnostics = "Export report"
+    override val diagnosticsEmpty = "Nothing recorded yet."
 
     override val settings = "Settings"
     override val languages = "Languages"

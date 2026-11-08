@@ -2,4 +2,6 @@
 <!-- APKs de actualización descargados (ver AppUpdater). -->
 <paths>
     <cache-path name="updates" path="updates/" />
+    <!-- Exported diagnostic reports (see DiagnosticsCollector). -->
+    <cache-path name="diagnostics" path="diagnostics/" />
 </paths>

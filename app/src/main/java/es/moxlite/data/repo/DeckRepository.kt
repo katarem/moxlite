@@ -5,6 +5,7 @@ import coil.ImageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.request.SuccessResult
+import es.moxlite.data.diagnostics.DiagnosticLog
 import es.moxlite.data.local.AppDatabase
 import es.moxlite.data.local.CardLocalizationEntity
 import es.moxlite.data.local.DeckCardEntity
@@ -64,6 +65,7 @@ class DeckRepository(
     private val writer: MoxfieldWriter,
     private val imageLoader: ImageLoader,
     private val settings: AppSettings,
+    private val log: DiagnosticLog,
 ) {
     private val decks = db.decks()
     private val ops = db.pendingOps()
@@ -93,6 +95,8 @@ class DeckRepository(
     fun observeDeck(id: String): Flow<DeckEntity?> = decks.observe(id)
     fun observeCards(id: String): Flow<List<DeckCardEntity>> = decks.observeCards(id)
     fun observePendingOps(): Flow<List<PendingOpEntity>> = ops.observeAll()
+    suspend fun pendingOpsNow(): List<PendingOpEntity> = ops.getAll()
+    suspend fun decksWithLocalChangesNow(): List<DeckEntity> = decks.getWithLocalChanges()
     fun observeFollowedUsers(): Flow<List<FollowedUserEntity>> = users.observeAll()
 
     /** Traducciones conocidas de impresiones al idioma [lang]. */
@@ -626,7 +630,11 @@ class DeckRepository(
      * cambios hechos mientras subía.
      */
     suspend fun pushPendingOps(): Boolean = pushMutex.withLock {
-        if (!writer.isAvailable) return@withLock true
+        if (!writer.isAvailable) {
+            log.w(SYNC_TAG, "Push skipped: no Moxfield account (${ops.getAll().size} changes stay queued)")
+            return@withLock true
+        }
+        log.i(SYNC_TAG, "Push started: ${ops.getAll().size} pending changes")
         val touched = mutableSetOf<String>()
         var complete = true
         var pass = 0
@@ -640,17 +648,21 @@ class DeckRepository(
                 val deck = decks.get(entity.deckId)
                 val op = runCatching { Http.json.decodeFromString(DeckOp.serializer(), entity.payload) }.getOrNull()
                 if (deck == null || op == null) {
+                    log.w(SYNC_TAG, "Dropped #${entity.id} ${entity.type} for ${entity.deckId}: deck missing=${deck == null}, unreadable=${op == null}")
                     ops.delete(entity.id)
                     continue
                 }
+                val label = "#${entity.id} ${op.typeName} on ${deck.publicId} (attempt ${entity.attempts + 1})"
                 try {
                     when (val result = writer.apply(deck, op, decks.getCards(deck.publicId))) {
                         WriteResult.Done -> {
+                            log.i(SYNC_TAG, "$label: done")
                             ops.delete(entity.id)
                             touched += deck.publicId
                             progressed = true
                         }
                         is WriteResult.Created -> {
+                            log.i(SYNC_TAG, "$label: created as ${result.publicId}")
                             // Se creó con todo su contenido actual: el resto de su cola sobra.
                             ops.deleteForDeck(deck.publicId)
                             decks.changeDeckId(deck, result.publicId, result.remoteId)
@@ -658,7 +670,10 @@ class DeckRepository(
                             blocked += deck.publicId
                             progressed = true
                         }
-                        WriteResult.NotSupported -> blocked += deck.publicId
+                        WriteResult.NotSupported -> {
+                            log.w(SYNC_TAG, "$label: not supported, the rest of this deck waits")
+                            blocked += deck.publicId
+                        }
                     }
                 } catch (e: CancellationException) {
                     throw e
@@ -666,15 +681,18 @@ class DeckRepository(
                     ops.update(entity.copy(attempts = entity.attempts + 1, lastError = e.userMessage()))
                     if (e.isTransient()) {
                         // Sin red, bloqueo, límite de peticiones o sesión: parar y reintentar luego.
+                        log.w(SYNC_TAG, "$label: temporary failure, the whole push stops until the next retry", e)
                         complete = false
                         break
                     }
                     // Error de esta operación (Moxfield la rechaza): se deja en cola con el error.
+                    log.e(SYNC_TAG, "$label: rejected, it stays queued and the rest of this deck waits", e)
                     blocked += deck.publicId
                 }
             }
             if (!complete || !progressed) break
         }
+        log.i(SYNC_TAG, "Push finished: complete=$complete, ${ops.getAll().size} changes still queued")
         cleanLocalChangeFlags()
         // Traer la versión canónica de los mazos subidos (ids de cartas, versión…).
         touched.forEach { id ->
@@ -724,7 +742,9 @@ class DeckRepository(
             )
         )
         decks.get(deckId)?.let { if (!it.hasLocalChanges) decks.upsert(it.copy(hasLocalChanges = true)) }
-        if (writer.isAvailable) SyncWorker.pushSoon(context)
+        val canPush = writer.isAvailable
+        log.d(SYNC_TAG, "Queued ${op.typeName} for $deckId${if (canPush) "" else " (no account: not scheduling a push)"}")
+        if (canPush) SyncWorker.pushSoon(context)
     }
 
     private suspend fun updateCommanders(deckId: String) =
@@ -753,6 +773,7 @@ class DeckRepository(
     }
 
     private companion object {
+        const val SYNC_TAG = "Sync"
         const val MAX_PASSES = 5
         const val RECHECK_MS = 30L * 24 * 60 * 60 * 1000
     }

@@ -60,7 +60,7 @@ class ApiTrafficLog(private val maxEntries: Int = 400) {
             """("(?:password|newPassword|token|refreshToken|refresh_token|access_token|accessToken|captcha\w*|recaptcha\w*)"\s*:\s*)"[^"]*"""",
             RegexOption.IGNORE_CASE,
         )
-        private val SECRET_QUERY = Regex("""([?&](?:token|access_token|code)=)[^&]+""", RegexOption.IGNORE_CASE)
+        private val SECRET_QUERY = Regex("""([?&](?:token|access_token|code)=)[^&\s]+""", RegexOption.IGNORE_CASE)
 
         fun isMoxfieldApi(url: String): Boolean =
             url.contains("api2.moxfield.com") || url.contains("api.moxfield.com")

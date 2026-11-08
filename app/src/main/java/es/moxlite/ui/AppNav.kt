@@ -46,6 +46,7 @@ import es.moxlite.ui.importer.ImportDraft
 import es.moxlite.ui.importer.ImportScreen
 import es.moxlite.ui.search.SearchScreen
 import es.moxlite.ui.settings.ApiLogScreen
+import es.moxlite.ui.settings.DiagnosticsScreen
 import es.moxlite.ui.settings.SettingsScreen
 import es.moxlite.ui.update.UpdatePrompt
 import es.moxlite.ui.users.UserDecksScreen
@@ -66,6 +67,7 @@ object Routes {
     const val WEB = "web/{mode}?url={url}"
     const val IMPORT = "import"
     const val API_LOG = "apilog"
+    const val DIAGNOSTICS = "diagnostics"
     const val BUILDER = "builder?deck={deck}"
 
     fun deck(id: String) = "deck/${Uri.encode(id)}"
@@ -176,6 +178,7 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
                     SettingsScreen(
                         openWeb = { nav.navigate(Routes.web(it)) },
                         openApiLog = { nav.navigate(Routes.API_LOG) },
+                        openDiagnostics = { nav.navigate(Routes.DIAGNOSTICS) },
                         openAccount = { nav.navigate(Routes.ACCOUNT) },
                     )
                 }
@@ -245,6 +248,9 @@ fun AppNav(incoming: IncomingLink?, onIncomingHandled: () -> Unit) {
                 }
                 composable(Routes.API_LOG) {
                     ApiLogScreen(onBack = { nav.popBackStack() })
+                }
+                composable(Routes.DIAGNOSTICS) {
+                    DiagnosticsScreen(onBack = { nav.popBackStack() })
                 }
             }
             OfflineBanner(!online)

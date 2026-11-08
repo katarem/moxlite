@@ -1,5 +1,6 @@
 package es.moxlite.data.session
 
+import es.moxlite.data.diagnostics.DiagnosticLog
 import es.moxlite.data.remote.Http
 import es.moxlite.data.remote.isCloudflareChallenge
 import kotlinx.coroutines.Dispatchers
@@ -66,6 +67,7 @@ data class AuthResult(
 class MoxfieldAuth(
     private val session: SessionManager,
     baseClient: OkHttpClient,
+    private val log: DiagnosticLog,
 ) {
     private val lock = Any()
 
@@ -87,7 +89,10 @@ class MoxfieldAuth(
         if (!force && before.hasValidToken) return true
         if (!probing && !before.hasAccount) return false
         // No machacar a Moxfield si acaba de fallar (sin red, bloqueo…).
-        if (!probing && System.currentTimeMillis() - lastFailureAt < RETRY_AFTER_FAILURE_MS) return false
+        if (!probing && System.currentTimeMillis() - lastFailureAt < RETRY_AFTER_FAILURE_MS) {
+            log.w(TAG, "Token renewal skipped: the previous attempt failed less than ${RETRY_AFTER_FAILURE_MS / 1000} s ago")
+            return false
+        }
 
         val request = Request.Builder()
             .url(URL)
@@ -105,22 +110,28 @@ class MoxfieldAuth(
                     result != null -> {
                         session.onRefreshed(result)
                         lastFailureAt = 0
+                        val minutes = result.expiresAt?.let { (it - System.currentTimeMillis()) / 60_000 }
+                        log.i(TAG, "Token renewed (force=$force, probing=$probing, expires in ${minutes ?: "?"} min)")
                         true
                     }
                     response.isCloudflareChallenge() || response.code == 429 || response.code >= 500 -> {
                         lastFailureAt = System.currentTimeMillis()
+                        log.w(TAG, "Token renewal failed temporarily: HTTP ${response.code} (cloudflare=${response.isCloudflareChallenge()})")
                         false
                     }
                     else -> {
                         // 200 sin token, 400 o 401: Moxfield no reconoce la sesión.
                         lastFailureAt = System.currentTimeMillis()
-                        if (!probing && before.hasAccount) session.markNeedsLogin()
+                        val signOut = !probing && before.hasAccount
+                        log.w(TAG, "Token renewal rejected: HTTP ${response.code}${if (signOut) ", the session is marked as needing login" else ""}")
+                        if (signOut) session.markNeedsLogin()
                         false
                     }
                 }
             }
         } catch (e: IOException) {
             lastFailureAt = System.currentTimeMillis()
+            log.w(TAG, "Token renewal failed: no response from Moxfield", e)
             false
         }
     }
@@ -129,6 +140,7 @@ class MoxfieldAuth(
         withContext(Dispatchers.IO) { refreshBlocking(force, probing) }
 
     private companion object {
+        const val TAG = "Auth"
         const val URL = "https://api2.moxfield.com/v1/startup/authenticated"
         const val BODY = """{"ignoreCookie":false,"isAppLogin":false}"""
         val JSON = "application/json".toMediaType()

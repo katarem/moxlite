@@ -7,6 +7,7 @@ import androidx.webkit.ProxyController
 import androidx.webkit.WebViewFeature
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import es.moxlite.data.diagnostics.DiagnosticLog
 import es.moxlite.data.settings.ProxySettings
 import es.moxlite.data.settings.ProxyType
 import es.moxlite.data.sync.SyncWorker
@@ -24,6 +25,8 @@ class MoxliteApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        recordCrashes()
+        container.diagnostics.i("App", "Process started (${BuildConfig.VERSION_NAME})")
         SyncWorker.schedulePeriodic(this)
         UpdateNotifications.createChannel(this)
         container.updater.scheduleBackgroundCheck()
@@ -43,6 +46,17 @@ class MoxliteApp : Application(), ImageLoaderFactory {
             if (!first || proxy.isUsable) ContextCompat.getMainExecutor(this@MoxliteApp).execute { applyWebViewProxy(proxy) }
             first = false
         }.launchIn(container.appScope)
+    }
+
+    /** Uncaught exceptions end up in the diagnostic log before the process dies. */
+    private fun recordCrashes() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching {
+                container.diagnostics.logBlocking(DiagnosticLog.Level.ERROR, "Crash", "Uncaught exception on thread ${thread.name}", error)
+            }
+            previous?.uncaughtException(thread, error)
+        }
     }
 
     /** El WebView (login, Moxfield web) usa el mismo proxy que OkHttp, si el sistema lo permite. */
