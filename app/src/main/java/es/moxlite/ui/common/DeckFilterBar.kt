@@ -50,12 +50,13 @@ import androidx.compose.ui.unit.dp
 import es.moxlite.domain.ColorMatch
 import es.moxlite.domain.DeckFilters
 import es.moxlite.domain.DeckSort
+import es.moxlite.domain.PreconType
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
 /**
- * Fila de filtros y orden para listas de mazos: orden, formato, colores, comandante, bracket y
- * tipo. La usan la búsqueda de Moxfield y "Mis mazos".
+ * Fila de filtros y orden para listas de mazos: orden, formato, precon, colores, comandante,
+ * bracket y tipo. La usan la búsqueda de Moxfield y "Mis mazos".
  *
  * @param commanderSuggestions sugerencias (nombre a mostrar, nombre en inglés) para un texto.
  */
@@ -89,7 +90,15 @@ fun DeckFilterBar(
             selected = filters.format != null,
             options = FORMATS.map { it to t.formatLabel(it) },
             current = filters.format,
-            onPick = { onChange(filters.copy(format = it)) },
+            onPick = { onChange(filters.withFormat(it)) },
+            anyLabel = t.anyOption,
+        )
+        DropdownChip(
+            label = filters.precon?.let(t::preconLabel) ?: t.filterPrecon,
+            selected = filters.precon != null,
+            options = PreconType.entries.map { it to t.preconLabel(it) },
+            current = filters.precon,
+            onPick = { onChange(filters.withPrecon(it)) },
             anyLabel = t.anyOption,
         )
         FilterChip(

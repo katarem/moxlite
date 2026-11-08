@@ -2,6 +2,7 @@ package es.moxlite.domain
 
 import es.moxlite.data.local.DeckEntity
 import es.moxlite.data.remote.Http
+import es.moxlite.data.remote.moxfield.DeckQuery
 import es.moxlite.data.remote.moxfield.MoxDeckDto
 import es.moxlite.data.remote.moxfield.MoxDeckSummaryDto
 import es.moxlite.data.remote.moxfield.MoxPage
@@ -150,5 +151,59 @@ class DeckFiltersTest {
         val (fresh, _) = DeckMapper.fromDto(dto.copy(bracket = null, hubs = emptyList()), null)
         assertNull(fresh.bracket)
         assertEquals(0L, fresh.viewedAt)
+    }
+
+    @Test
+    fun `precon kind is sent as the format and excludes the format filter`() {
+        val commanderPrecons = DeckFilters(format = "modern").withPrecon(PreconType.COMMANDER)
+        assertNull(commanderPrecons.format)
+        assertEquals("commanderPrecons", commanderPrecons.remoteFormat)
+        assertEquals(1, commanderPrecons.activeCount)
+
+        val modern = commanderPrecons.withFormat("modern")
+        assertNull(modern.precon)
+        assertEquals("modern", modern.remoteFormat)
+
+        assertEquals(PreconType.OTHER, DeckFilters(precon = PreconType.OTHER).withFormat(null).precon)
+        assertEquals("modern", DeckFilters(format = "modern").withPrecon(null).format)
+        assertEquals("precons", DeckFilters(precon = PreconType.OTHER).remoteFormat)
+        assertEquals(DeckFilters(text = "x"), DeckFilters(text = "x", precon = PreconType.COMMANDER).cleared())
+    }
+
+    @Test
+    fun `local filter by precon kind`() {
+        val precon = deck("p", "Animated Army", format = "commanderPrecons")
+        val other = deck("o", "Starter", format = "precons")
+        val own = deck("c", "Mine", format = "commander")
+        val all = listOf(precon, other, own)
+        assertEquals(listOf(precon), DeckFilters(precon = PreconType.COMMANDER).applyLocal(all))
+        assertEquals(listOf(other), DeckFilters(precon = PreconType.OTHER).applyLocal(all))
+        assertEquals(listOf(own), DeckFilters(format = "commander").applyLocal(all))
+    }
+
+    @Test
+    fun `remote query keeps the author and adds text, filters and precon kind`() {
+        val base = DeckQuery(authorUserName = "WizardsOfTheCoast", pageSize = 50)
+        val filters = DeckFilters(text = "Bloomburrow", bracket = 2, hub = "Tokens", precon = PreconType.COMMANDER, sort = DeckSort.LIKES)
+        val params = filters.toRemoteQuery(base, commanderCardId = "abc12", page = 2, pageSize = 50).toParams()
+
+        assertEquals("WizardsOfTheCoast", params["authorUserNames"])
+        assertEquals("Bloomburrow", params["filter"])
+        assertEquals("commanderPrecons", params["fmt"])
+        assertEquals("abc12", params["commanderCardId"])
+        assertEquals("2", params["minBracket"])
+        assertEquals("2", params["maxBracket"])
+        assertEquals("Tokens", params["hubName"])
+        assertEquals("likes", params["sortType"])
+        assertEquals("2", params["pageNumber"])
+    }
+
+    @Test
+    fun `remote query without filters only keeps the author`() {
+        val params = DeckFilters().toRemoteQuery(DeckQuery(authorUserName = "pepe"), null, page = 1, pageSize = 30).toParams()
+        assertEquals("pepe", params["authorUserNames"])
+        assertFalse(params.containsKey("fmt"))
+        assertFalse(params.containsKey("filter"))
+        assertFalse(params.containsKey("hubName"))
     }
 }

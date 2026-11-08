@@ -5,6 +5,7 @@ import es.moxlite.data.settings.DeckSorting
 import es.moxlite.data.settings.DeckViewMode
 import es.moxlite.domain.ColorMatch
 import es.moxlite.domain.DeckSort
+import es.moxlite.domain.PreconType
 
 /** Español (idioma por defecto). */
 object Es : Strings {
@@ -266,6 +267,8 @@ object Es : Strings {
         "pauperedh", "paupercommander" -> "Pauper Commander"
         "duelcommander" -> "Duel Commander"
         "predh" -> "PreDH"
+        "commanderprecons" -> "Precon de Commander"
+        "precons" -> "Precon"
         "none" -> "Sin formato"
         "" -> ""
         else -> format.replaceFirstChar { it.uppercase() }
@@ -289,6 +292,11 @@ object Es : Strings {
         5 -> "5 · cEDH"
         else -> bracket.toString()
     }
+    override val filterPrecon = "Precon"
+    override fun preconLabel(type: PreconType) = when (type) {
+        PreconType.COMMANDER -> "Precons de Commander"
+        PreconType.OTHER -> "Otros precons (starter, challenger…)"
+    }
     override val filterHub = "Tipo"
     override val hubPlaceholder = "Tipo de mazo (Tokens, Aristocrats, Budget…)"
     override val anyOption = "Cualquiera"
@@ -311,6 +319,7 @@ object Es : Strings {
     override val follow = "Seguir"
     override val unfollow = "Dejar de seguir"
     override fun userHasNoPublicDecks(user: String) = "@$user no tiene mazos públicos (o no existe)."
+    override fun searchUserDecksPlaceholder(user: String) = "Buscar en los mazos de @$user"
 
     override val importList = "Importar lista"
     override val deckName = "Nombre del mazo"

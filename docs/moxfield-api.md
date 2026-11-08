@@ -30,6 +30,7 @@ Notas para los filtros de la app (de [moxtui/FINDINGS.md](https://github.com/apa
 - **No hay filtro de colores**: `colors`/`colorIdentity` se ignoran. La app filtra los colores sobre cada página.
 - `hubName` filtra por tipo de mazo (hub). Cada resultado trae `hubNames`, `bracket`, `autoBracket`, `userBracket` y `commanders`.
 - Con `sortType=updated` el orden cambia mientras se pagina: un mismo mazo puede salir en dos páginas (la app quita repetidos).
+- **Precons**: Moxfield publishes them as decks of the user `WizardsOfTheCoast` with formats of their own: `fmt=commanderPrecons` (Commander precons, label "Commander Precons") and `fmt=precons` (every other precon: starter kits, challenger decks, duel decks…, label "Precons"). The product is only in the name, e.g. `Animated Army (Bloomburrow Commander Precon Decklist)`. `commanderPrecons` confirmed with the exported decks of [Westly/CommanderPrecons](https://github.com/Westly/CommanderPrecons); `precons` taken from the format label of those decks on the web.
 - `pageSize` máximo 100 y como mucho 10 000 resultados (100 páginas).
 
 ### Forma del mazo (`/v3/decks/all/{id}`)

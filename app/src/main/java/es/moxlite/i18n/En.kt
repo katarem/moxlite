@@ -5,6 +5,7 @@ import es.moxlite.data.settings.DeckSorting
 import es.moxlite.data.settings.DeckViewMode
 import es.moxlite.domain.ColorMatch
 import es.moxlite.domain.DeckSort
+import es.moxlite.domain.PreconType
 
 /** English. */
 object En : Strings {
@@ -266,6 +267,8 @@ object En : Strings {
         "pauperedh", "paupercommander" -> "Pauper Commander"
         "duelcommander" -> "Duel Commander"
         "predh" -> "PreDH"
+        "commanderprecons" -> "Commander precon"
+        "precons" -> "Precon"
         "none" -> "No format"
         "" -> ""
         else -> format.replaceFirstChar { it.uppercase() }
@@ -289,6 +292,11 @@ object En : Strings {
         5 -> "5 · cEDH"
         else -> bracket.toString()
     }
+    override val filterPrecon = "Precon"
+    override fun preconLabel(type: PreconType) = when (type) {
+        PreconType.COMMANDER -> "Commander precons"
+        PreconType.OTHER -> "Other precons (starter, challenger…)"
+    }
     override val filterHub = "Type"
     override val hubPlaceholder = "Deck type (Tokens, Aristocrats, Budget…)"
     override val anyOption = "Any"
@@ -311,6 +319,7 @@ object En : Strings {
     override val follow = "Follow"
     override val unfollow = "Unfollow"
     override fun userHasNoPublicDecks(user: String) = "@$user has no public decks (or doesn't exist)."
+    override fun searchUserDecksPlaceholder(user: String) = "Search @$user's decks"
 
     override val importList = "Import list"
     override val deckName = "Deck name"

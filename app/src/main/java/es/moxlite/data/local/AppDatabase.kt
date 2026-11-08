@@ -151,6 +151,13 @@ abstract class UserDao {
 
     @Query("DELETE FROM followed_users WHERE userName = :userName")
     abstract suspend fun delete(userName: String)
+
+    /** Users whose avatar has never been fetched (followed before avatars were stored). */
+    @Query("SELECT * FROM followed_users WHERE profileImageUrl IS NULL")
+    abstract suspend fun getWithoutAvatar(): List<FollowedUserEntity>
+
+    @Query("UPDATE followed_users SET profileImageUrl = :url WHERE userName = :userName")
+    abstract suspend fun setAvatar(userName: String, url: String)
 }
 
 @Dao
@@ -170,7 +177,7 @@ abstract class LocalizationDao {
         DeckEntity::class, DeckCardEntity::class, PendingOpEntity::class, FollowedUserEntity::class,
         CardLocalizationEntity::class, DeckAliasEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -215,9 +222,16 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v4: avatar of followed users. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE followed_users ADD COLUMN profileImageUrl TEXT")
+            }
+        }
+
         fun build(context: Context): AppDatabase =
             Room.databaseBuilder(context, AppDatabase::class.java, "moxlite.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
     }
 }

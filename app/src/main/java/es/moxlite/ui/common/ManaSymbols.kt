@@ -69,12 +69,17 @@ internal sealed interface ManaSymbolSpec {
             "2" to Color(0xFFD0C6BB),
         )
 
-        private const val PHYREXIAN_SCALE = 1.25f
+        /** As large as the glyph box allows (it used to be 1.25, capped by the width to this). */
+        private const val PHYREXIAN_SCALE = 0.74f / 0.68f
+
+        /** The colorless diamond is a thin outline: drawn larger so it does not look smaller than the colors. */
+        private const val COLORLESS_SCALE = 1.25f
 
         /** [symbol] es lo que va entre llaves, sin ellas: "W", "2/U", "W/U/P", "T"… */
         fun of(symbol: String): ManaSymbolSpec {
             val s = symbol.trim().uppercase()
             if (s == "Q") return Single(Ink, "Q", ink = Color.White)
+            if (s == "C") return Single(Generic, s, scale = COLORLESS_SCALE)
             if (s in ManaGlyphs.all) return Single(solid[s] ?: Generic, s)
             if (s == "1/2") return Single(Generic, "½")
             val parts = s.split('/')
@@ -147,7 +152,7 @@ fun ManaSymbol(symbol: String, modifier: Modifier = Modifier, shadow: Boolean = 
         when (spec) {
             is ManaSymbolSpec.Single -> {
                 drawCircle(spec.background, r, c)
-                drawGlyph(spec.glyph, c, d * 0.68f * spec.scale, d * 0.74f, spec.ink)
+                drawGlyph(spec.glyph, c, d * 0.68f * spec.scale, d * 0.74f * spec.scale, spec.ink)
             }
             is ManaSymbolSpec.Split -> {
                 val circle = Path().apply { addOval(Rect(c, r)) }

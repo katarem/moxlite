@@ -1,6 +1,7 @@
 package es.moxlite.domain
 
 import es.moxlite.data.local.DeckEntity
+import es.moxlite.data.remote.moxfield.DeckQuery
 import es.moxlite.data.remote.moxfield.MoxDeckSummaryDto
 import es.moxlite.data.repo.DeckMapper
 
@@ -37,6 +38,18 @@ enum class ColorMatch {
 }
 
 /**
+ * Precons that Moxfield publishes as deck formats of their own (user WizardsOfTheCoast), so they
+ * are filtered with `fmt` like any other format.
+ */
+enum class PreconType(val format: String) {
+    /** Official Commander precons. */
+    COMMANDER("commanderPrecons"),
+
+    /** Every other precon: starter kits, challenger decks, duel decks… */
+    OTHER("precons"),
+}
+
+/**
  * Filtros de mazos, comunes a la búsqueda de Moxfield y a "Mis mazos".
  *
  * En Moxfield, formato, comandante, bracket y tipo (hub) se filtran en el servidor; los colores
@@ -54,16 +67,27 @@ data class DeckFilters(
     val bracket: Int? = null,
     /** Tipo de mazo: "hub" de Moxfield (Tokens, Aristocrats, Budget…). */
     val hub: String? = null,
+    /** Precon kind; it is sent as the format, so it excludes [format]. */
+    val precon: PreconType? = null,
     val sort: DeckSort = DeckSort.UPDATED,
 ) {
+    /** Format sent to Moxfield (`fmt`): the precon kind takes the place of the format. */
+    val remoteFormat: String? get() = precon?.format ?: format
+
     /** Filtros puestos (sin contar texto ni orden), para el indicador "Limpiar". */
     val activeCount: Int
-        get() = listOf(format, colors.ifBlank { null }, commander, bracket, hub).count { it != null }
+        get() = listOf(format, colors.ifBlank { null }, commander, bracket, hub, precon).count { it != null }
 
     /** Hay que filtrar en el móvil los resultados de Moxfield (pidiendo más páginas). */
     val needsClientFilter: Boolean get() = colors.isNotBlank()
 
     fun cleared() = DeckFilters(text = text, sort = sort)
+
+    /** Picking a format drops the precon kind: Moxfield only takes one `fmt`. */
+    fun withFormat(format: String?) = copy(format = format, precon = if (format != null) null else precon)
+
+    /** Picking a precon kind drops the format: Moxfield only takes one `fmt`. */
+    fun withPrecon(precon: PreconType?) = copy(precon = precon, format = if (precon != null) null else format)
 
     /** Cambia un color: "C" excluye a los demás y al revés. */
     fun toggleColor(c: Char): DeckFilters {
@@ -108,13 +132,33 @@ data class DeckFilters(
                 d.authorDisplayName.contains(q, true) || d.commanders.contains(q, true)
             if (!inText) return false
         }
-        if (format != null && normalizeFormat(d.format) != normalizeFormat(format)) return false
+        val wantedFormat = remoteFormat
+        if (wantedFormat != null && normalizeFormat(d.format) != normalizeFormat(wantedFormat)) return false
         if (!matchesColors(d.colorIdentity)) return false
         if (commander != null && d.commanderList.none { it.contains(commander, ignoreCase = true) }) return false
         if (bracket != null && d.bracket != bracket) return false
         if (hub != null && d.hubList.none { it.equals(hub, ignoreCase = true) }) return false
         return true
     }
+
+    /**
+     * Moxfield search for these filters on top of [base] (which may carry the author, so a user's
+     * decks are searched with the same filters). Colors are not sent: see [needsClientFilter].
+     *
+     * @param commanderCardId Moxfield printing id of [commander], already looked up.
+     */
+    fun toRemoteQuery(base: DeckQuery, commanderCardId: String?, page: Int, pageSize: Int) = base.copy(
+        text = text,
+        format = remoteFormat ?: base.format,
+        commanderCardId = commanderCardId,
+        minBracket = bracket,
+        maxBracket = bracket,
+        hubName = hub,
+        sortType = sort.remoteKey ?: base.sortType,
+        sortDirection = "descending",
+        pageNumber = page,
+        pageSize = pageSize,
+    )
 
     /** Filtra y ordena mazos guardados en el móvil. */
     fun applyLocal(decks: List<DeckEntity>): List<DeckEntity> {

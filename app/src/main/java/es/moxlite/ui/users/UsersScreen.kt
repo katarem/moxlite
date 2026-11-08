@@ -2,6 +2,7 @@ package es.moxlite.ui.users
 
 import es.moxlite.ui.common.LocalStrings
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,15 +33,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
 import es.moxlite.data.local.FollowedUserEntity
 import es.moxlite.data.remote.moxfield.DeckQuery
 import es.moxlite.data.remote.moxfield.MoxAuthorDto
@@ -49,8 +52,9 @@ import es.moxlite.data.repo.DeckRepository
 import es.moxlite.ui.common.MessageBox
 import es.moxlite.ui.common.SectionHeader
 import es.moxlite.ui.common.appContainer
-import es.moxlite.ui.search.DeckResultsList
+import es.moxlite.ui.search.DeckSearchContent
 import es.moxlite.ui.search.DeckSearchViewModel
+import es.moxlite.ui.search.commanderSuggestionsSafe
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -70,6 +74,10 @@ class UsersViewModel(private val repo: DeckRepository) : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
     private var job: Job? = null
+
+    init {
+        viewModelScope.launch { repo.refreshMissingAvatars() }
+    }
 
     fun search(text: String, debounce: Boolean = true) {
         job?.cancel()
@@ -124,7 +132,7 @@ fun UsersScreen(openUser: (String) -> Unit) {
                         ListItem(
                             headlineContent = { Text(u.displayName.ifBlank { u.userName }) },
                             supportingContent = { Text("@${u.userName}") },
-                            leadingContent = { Icon(Icons.Outlined.Person, null) },
+                            leadingContent = { Avatar(u.profileImageUrl) },
                             trailingContent = {
                                 IconButton(onClick = { vm.unfollow(u.userName) }) { Icon(Icons.Outlined.PersonRemove, t.unfollow) }
                             },
@@ -153,13 +161,26 @@ fun UsersScreen(openUser: (String) -> Unit) {
     }
 }
 
+/** Moxfield avatar; the person icon while it loads, if it fails or if the user has none. */
 @Composable
 private fun Avatar(url: String?) {
-    if (url.isNullOrBlank()) Icon(Icons.Outlined.Person, null)
-    else AsyncImage(model = url, contentDescription = null, modifier = Modifier.size(40.dp).clip(CircleShape))
+    Box(Modifier.size(40.dp).clip(CircleShape), contentAlignment = Alignment.Center) {
+        if (url.isNullOrBlank()) {
+            Icon(Icons.Outlined.Person, null)
+        } else {
+            SubcomposeAsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                loading = { Icon(Icons.Outlined.Person, null) },
+                error = { Icon(Icons.Outlined.Person, null) },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
 }
 
-/** Mazos públicos de un usuario (búsqueda con authorUserNames). */
+/** Mazos públicos de un usuario (búsqueda con authorUserNames), con buscador y filtros. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UserDecksScreen(userName: String, onBack: () -> Unit, openDeck: (String) -> Unit) {
@@ -170,6 +191,7 @@ fun UserDecksScreen(userName: String, onBack: () -> Unit, openDeck: (String) -> 
     }
     val state by vm.state.collectAsStateWithLifecycle()
     LaunchedEffect(userName) { if (!state.searched) vm.search() }
+    val filtered = state.filters.activeCount > 0 || state.filters.text.isNotBlank()
 
     Scaffold(
         topBar = {
@@ -179,12 +201,15 @@ fun UserDecksScreen(userName: String, onBack: () -> Unit, openDeck: (String) -> 
             )
         },
     ) { padding ->
-        DeckResultsList(
+        DeckSearchContent(
             state = state,
+            placeholder = t.searchUserDecksPlaceholder(userName),
+            emptyText = if (filtered) t.noDecksMatch else t.userHasNoPublicDecks(userName),
+            onSearch = vm::search,
+            onLoadMore = vm::loadMore,
+            onRetry = vm::retry,
             openDeck = openDeck,
-            onLoadMore = { vm.loadMore() },
-            onRetry = { vm.search() },
-            emptyText = t.userHasNoPublicDecks(userName),
+            commanderSuggestions = { container.cardRepository.commanderSuggestionsSafe(it) },
             modifier = Modifier.padding(padding),
         )
     }
