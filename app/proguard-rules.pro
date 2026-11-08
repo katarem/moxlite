@@ -19,3 +19,8 @@
 -keepclassmembers class es.moxlite.data.session.** {
     @android.webkit.JavascriptInterface <methods>;
 }
+
+# Diagnostic log: keep the app's own class and method names, file names and line numbers so the
+# stack traces in an exported report can be read without the mapping file (personal app).
+-keepnames class es.moxlite.** { *; }
+-keepattributes SourceFile, LineNumberTable

@@ -483,8 +483,9 @@ class DeckRepository(
     suspend fun copyDeck(sourceId: String, name: String): String {
         val source = decks.get(sourceId) ?: error(I18n.strings.errDeckNotDownloaded)
         val id = newLocalId()
+        val format = WriteParsing.formatForNewDeck(source.format)
         decks.replaceDeck(
-            newLocalDeck(id, name, source.format).copy(
+            newLocalDeck(id, name, format).copy(
                 description = source.description,
                 colorIdentity = source.colorIdentity,
                 featuredScryfallId = source.featuredScryfallId,
@@ -498,7 +499,7 @@ class DeckRepository(
             ),
             decks.getCards(sourceId).map { it.copy(deckId = id) },
         )
-        enqueue(id, DeckOp.CreateDeck(name, source.format, copiedFrom = source.publicId))
+        enqueue(id, DeckOp.CreateDeck(name, format, copiedFrom = source.publicId))
         return id
     }
 
