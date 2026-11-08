@@ -1,6 +1,7 @@
 package es.moxlite.ui.deck
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -94,8 +95,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -183,8 +182,8 @@ fun DeckScreen(
     }
 
     val d = deck
-    // "Add card" is drawn on top inside the activity window: as a Dialog, its window ignored the
-    // navigation bar on some phones and the "Add" button was cut off at the bottom.
+    // "Add card" and "Choose art" are drawn on top inside the activity window: as Dialogs, their
+    // window ignored the navigation bar on some phones and the bottom was cut off.
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
@@ -291,9 +290,20 @@ fun DeckScreen(
             }
         }
         if (dialog == "add") AddCardScreen(vm = vm, onDismiss = { dialog = null; vm.clearSearch() })
+        printings?.let { state ->
+            val card = selected?.let { s -> cards.firstOrNull { it.board == s.board && it.cardKey == s.cardKey } }
+            PrintingsScreen(
+                state = state,
+                currentScryfallId = card?.scryfallId,
+                onDismiss = vm::closePrintings,
+                onPick = { printing -> card?.let { vm.changePrinting(it, printing) } },
+            )
+        }
     }
 
-    selected?.let { card ->
+    // Hidden while choosing art: the detail is a dialog window and would cover the art picker,
+    // which is drawn inside the activity. It comes back when the picker closes.
+    selected?.takeIf { printings == null }?.let { card ->
         // Siempre la versión actual de la fila (la cantidad o el arte pueden haber cambiado).
         val current = cards.firstOrNull { it.board == card.board && it.cardKey == card.cardKey }
         if (current == null) selected = null
@@ -306,16 +316,6 @@ fun DeckScreen(
             onQty = { vm.setQuantity(current, it) },
             onMove = { board -> vm.move(current, board); selected = null },
             onChangeArt = { vm.loadPrintings(current) },
-        )
-    }
-
-    printings?.let { state ->
-        val card = selected?.let { s -> cards.firstOrNull { it.board == s.board && it.cardKey == s.cardKey } }
-        PrintingsDialog(
-            state = state,
-            currentScryfallId = card?.scryfallId,
-            onDismiss = vm::closePrintings,
-            onPick = { printing -> card?.let { vm.changePrinting(it, printing) } },
         )
     }
 
@@ -841,67 +841,61 @@ private fun CardDetailDialog(
 
 /** Elegir arte: todas las impresiones de la carta, como en Moxfield. */
 @Composable
-private fun PrintingsDialog(
+private fun PrintingsScreen(
     state: PrintingsState,
     currentScryfallId: String?,
     onDismiss: () -> Unit,
     onPick: (ScryCard) -> Unit,
 ) {
     val t = LocalStrings.current
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
-        Surface(
-            Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp),
-            shape = RoundedCornerShape(16.dp),
-        ) {
-            Column {
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(t.chooseArt, style = MaterialTheme.typography.titleMedium)
-                        Text(state.cardName, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    TextButton(onClick = onDismiss) { Text(t.close) }
+    BackHandler(onBack = onDismiss)
+    // Full screen inside the activity window, like "Add card", so the insets are always the real ones.
+    Surface(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(t.chooseArt, style = MaterialTheme.typography.titleMedium)
+                    Text(state.cardName, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                when {
-                    state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    state.error != null -> MessageBox(state.error)
-                    state.printings.isEmpty() -> MessageBox(t.noResults, isError = false)
-                    else -> LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 110.dp),
-                        modifier = Modifier.fillMaxSize().padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(state.printings, key = { it.id }) { p ->
-                            val current = p.id == currentScryfallId
-                            Column(
-                                Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .then(if (current) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
-                                    .clickable(enabled = !current) { onPick(p) }
-                                    .padding(2.dp),
-                            ) {
-                                AsyncImage(
-                                    model = p.imageUrl(ScryfallImages.Size.NORMAL),
-                                    contentDescription = p.setName,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxWidth().aspectRatio(0.716f).clip(RoundedCornerShape(6.dp)),
-                                )
-                                Text(
-                                    "${p.set.uppercase()} · ${p.collectorNumber}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Text(
-                                    listOfNotNull(p.setName.ifBlank { null }, p.prices.eur?.let { "$it €" }).joinToString(" · "),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+                TextButton(onClick = onDismiss) { Text(t.close) }
+            }
+            when {
+                state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                state.error != null -> MessageBox(state.error)
+                state.printings.isEmpty() -> MessageBox(t.noResults, isError = false)
+                else -> LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 110.dp),
+                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(state.printings, key = { it.id }) { p ->
+                        val current = p.id == currentScryfallId
+                        Column(
+                            Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .then(if (current) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
+                                .clickable(enabled = !current) { onPick(p) }
+                                .padding(2.dp),
+                        ) {
+                            AsyncImage(
+                                model = p.imageUrl(ScryfallImages.Size.NORMAL),
+                                contentDescription = p.setName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxWidth().aspectRatio(0.716f).clip(RoundedCornerShape(6.dp)),
+                            )
+                            Text(
+                                "${p.set.uppercase()} · ${p.collectorNumber}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                listOfNotNull(p.setName.ifBlank { null }, p.prices.eur?.let { "$it €" }).joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }
