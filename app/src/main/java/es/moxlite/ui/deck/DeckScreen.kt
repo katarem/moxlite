@@ -1,6 +1,7 @@
 package es.moxlite.ui.deck
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -94,8 +95,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil.compose.AsyncImage
@@ -183,112 +182,128 @@ fun DeckScreen(
     }
 
     val d = deck
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(d?.name ?: t.deck, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, t.back) } },
-                actions = {
-                    if (d != null && !d.isLocalOnly) {
-                        IconButton(onClick = { vm.toggleSaved() }) {
-                            Icon(
-                                if (d.isSaved) Icons.Filled.DownloadForOffline else Icons.Outlined.DownloadForOffline,
-                                contentDescription = if (d.isSaved) t.savedOffline else t.saveOffline,
-                                tint = if (d.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, t.refresh) }
-                    }
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, t.more) }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        if (d != null) {
-                            MenuItem(t.shareLink, Icons.Outlined.Link) { menu = false; vm.shareLink() }
-                            MenuItem(t.copyCode, Icons.Outlined.QrCode) { menu = false; vm.copyCode() }
-                            MenuItem(t.exportText, Icons.Outlined.Share) { menu = false; dialog = "export" }
-                            MenuItem(t.copyDeck, Icons.Outlined.ContentCopy) { menu = false; dialog = "copy" }
-                            if (canEdit) MenuItem(t.rename, Icons.Outlined.Edit) { menu = false; dialog = "rename" }
-                            if (canEdit && d.format.equals("commander", ignoreCase = true)) {
-                                MenuItem(t.edhImproveDeck, Icons.Outlined.AutoAwesome) { menu = false; openBuilder(d.publicId) }
-                            }
-                        }
+    // "Add card" and "Choose art" are drawn on top inside the activity window: as Dialogs, their
+    // window ignored the navigation bar on some phones and the bottom was cut off.
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(d?.name ?: t.deck, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, t.back) } },
+                    actions = {
                         if (d != null && !d.isLocalOnly) {
-                            MenuItem(t.viewOnMoxfieldWeb, Icons.Outlined.OpenInBrowser) {
-                                menu = false; openWeb(MoxfieldIds.deckUrl(d.publicId))
+                            IconButton(onClick = { vm.toggleSaved() }) {
+                                Icon(
+                                    if (d.isSaved) Icons.Filled.DownloadForOffline else Icons.Outlined.DownloadForOffline,
+                                    contentDescription = if (d.isSaved) t.savedOffline else t.saveOffline,
+                                    tint = if (d.isSaved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            IconButton(onClick = { vm.refresh() }) { Icon(Icons.Outlined.Refresh, t.refresh) }
+                        }
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, t.more) }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            if (d != null) {
+                                MenuItem(t.shareLink, Icons.Outlined.Link) { menu = false; vm.shareLink() }
+                                MenuItem(t.copyCode, Icons.Outlined.QrCode) { menu = false; vm.copyCode() }
+                                MenuItem(t.exportText, Icons.Outlined.Share) { menu = false; dialog = "export" }
+                                MenuItem(t.copyDeck, Icons.Outlined.ContentCopy) { menu = false; dialog = "copy" }
+                                if (canEdit) MenuItem(t.rename, Icons.Outlined.Edit) { menu = false; dialog = "rename" }
+                                if (canEdit && d.format.equals("commander", ignoreCase = true)) {
+                                    MenuItem(t.edhImproveDeck, Icons.Outlined.AutoAwesome) { menu = false; openBuilder(d.publicId) }
+                                }
+                            }
+                            if (d != null && !d.isLocalOnly) {
+                                MenuItem(t.viewOnMoxfieldWeb, Icons.Outlined.OpenInBrowser) {
+                                    menu = false; openWeb(MoxfieldIds.deckUrl(d.publicId))
+                                }
+                            }
+                            if (d?.authorUserName?.isNotBlank() == true) {
+                                MenuItem(t.moreDecksBy(d.authorUserName), Icons.Outlined.Person) { menu = false; openUser(d.authorUserName) }
+                            }
+                            if (d?.hasLocalChanges == true && !d.isLocalOnly) {
+                                MenuItem(t.discardLocalChanges, Icons.Outlined.Restore) { menu = false; dialog = "discard" }
+                            }
+                            MenuItem(t.removeFromPhone, Icons.Outlined.DeleteOutline) { menu = false; dialog = "remove" }
+                        }
+                    },
+                )
+            },
+            floatingActionButton = {
+                if (d != null && (cards.isNotEmpty() || d.isFullyLoaded)) {
+                    if (canEdit) {
+                        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            if (editing) {
+                                SmallFloatingActionButton(onClick = { dialog = "add" }) { Icon(Icons.Outlined.Add, t.addCard) }
+                            }
+                            FloatingActionButton(onClick = { editingRequested = !editingRequested }) {
+                                Icon(if (editing) Icons.Outlined.Check else Icons.Outlined.Edit, if (editing) t.finishEditing else t.edit)
                             }
                         }
-                        if (d?.authorUserName?.isNotBlank() == true) {
-                            MenuItem(t.moreDecksBy(d.authorUserName), Icons.Outlined.Person) { menu = false; openUser(d.authorUserName) }
-                        }
-                        if (d?.hasLocalChanges == true && !d.isLocalOnly) {
-                            MenuItem(t.discardLocalChanges, Icons.Outlined.Restore) { menu = false; dialog = "discard" }
-                        }
-                        MenuItem(t.removeFromPhone, Icons.Outlined.DeleteOutline) { menu = false; dialog = "remove" }
+                    } else {
+                        // Mazo ajeno: como en Moxfield, se copia para editarlo.
+                        ExtendedFloatingActionButton(
+                            onClick = { dialog = "copy" },
+                            icon = { Icon(Icons.Outlined.ContentCopy, null) },
+                            text = { Text(t.copyToEdit) },
+                        )
                     }
-                },
+                }
+            },
+            snackbarHost = { SnackbarHost(snackbar) },
+        ) { padding ->
+            Column(Modifier.padding(padding).fillMaxSize()) {
+                if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                when {
+                    d != null && (cards.isNotEmpty() || d.isFullyLoaded) -> DeckContent(
+                        deck = d,
+                        cards = cards,
+                        localized = localized,
+                        editing = editing,
+                        viewMode = viewMode,
+                        grouping = grouping,
+                        sorting = sorting,
+                        onViewMode = container.settings::setViewMode,
+                        onGrouping = container.settings::setGrouping,
+                        onSorting = container.settings::setSorting,
+                        onCardClick = { selected = it },
+                        onQty = vm::setQuantity,
+                        openUser = openUser,
+                        needsLogin = d.hasLocalChanges && !session.hasAccount,
+                        openLogin = openLogin,
+                    )
+                    loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    error != null -> {
+                        val e = error!!
+                        MessageBox(
+                            text = e.userMessage(),
+                            actionLabel = if (e is MoxError.CloudflareBlocked) t.openMoxfieldInApp else t.retry,
+                            onAction = {
+                                if (e is MoxError.CloudflareBlocked) openWeb(MoxfieldIds.deckUrl(publicId)) else vm.refresh()
+                            },
+                        )
+                    }
+                    // Mientras Room responde o el mazo cambia de id (recién subido a Moxfield):
+                    // nunca una pantalla en blanco.
+                    else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                }
+            }
+        }
+        if (dialog == "add") AddCardScreen(vm = vm, onDismiss = { dialog = null; vm.clearSearch() })
+        printings?.let { state ->
+            val card = selected?.let { s -> cards.firstOrNull { it.board == s.board && it.cardKey == s.cardKey } }
+            PrintingsScreen(
+                state = state,
+                currentScryfallId = card?.scryfallId,
+                onDismiss = vm::closePrintings,
+                onPick = { printing -> card?.let { vm.changePrinting(it, printing) } },
             )
-        },
-        floatingActionButton = {
-            if (d != null && (cards.isNotEmpty() || d.isFullyLoaded)) {
-                if (canEdit) {
-                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (editing) {
-                            SmallFloatingActionButton(onClick = { dialog = "add" }) { Icon(Icons.Outlined.Add, t.addCard) }
-                        }
-                        FloatingActionButton(onClick = { editingRequested = !editingRequested }) {
-                            Icon(if (editing) Icons.Outlined.Check else Icons.Outlined.Edit, if (editing) t.finishEditing else t.edit)
-                        }
-                    }
-                } else {
-                    // Mazo ajeno: como en Moxfield, se copia para editarlo.
-                    ExtendedFloatingActionButton(
-                        onClick = { dialog = "copy" },
-                        icon = { Icon(Icons.Outlined.ContentCopy, null) },
-                        text = { Text(t.copyToEdit) },
-                    )
-                }
-            }
-        },
-        snackbarHost = { SnackbarHost(snackbar) },
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            when {
-                d != null && (cards.isNotEmpty() || d.isFullyLoaded) -> DeckContent(
-                    deck = d,
-                    cards = cards,
-                    localized = localized,
-                    editing = editing,
-                    viewMode = viewMode,
-                    grouping = grouping,
-                    sorting = sorting,
-                    onViewMode = container.settings::setViewMode,
-                    onGrouping = container.settings::setGrouping,
-                    onSorting = container.settings::setSorting,
-                    onCardClick = { selected = it },
-                    onQty = vm::setQuantity,
-                    openUser = openUser,
-                    needsLogin = d.hasLocalChanges && !session.hasAccount,
-                    openLogin = openLogin,
-                )
-                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                error != null -> {
-                    val e = error!!
-                    MessageBox(
-                        text = e.userMessage(),
-                        actionLabel = if (e is MoxError.CloudflareBlocked) t.openMoxfieldInApp else t.retry,
-                        onAction = {
-                            if (e is MoxError.CloudflareBlocked) openWeb(MoxfieldIds.deckUrl(publicId)) else vm.refresh()
-                        },
-                    )
-                }
-                // Mientras Room responde o el mazo cambia de id (recién subido a Moxfield):
-                // nunca una pantalla en blanco.
-                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            }
         }
     }
 
-    selected?.let { card ->
+    // Hidden while choosing art: the detail is a dialog window and would cover the art picker,
+    // which is drawn inside the activity. It comes back when the picker closes.
+    selected?.takeIf { printings == null }?.let { card ->
         // Siempre la versión actual de la fila (la cantidad o el arte pueden haber cambiado).
         val current = cards.firstOrNull { it.board == card.board && it.cardKey == card.cardKey }
         if (current == null) selected = null
@@ -301,16 +316,6 @@ fun DeckScreen(
             onQty = { vm.setQuantity(current, it) },
             onMove = { board -> vm.move(current, board); selected = null },
             onChangeArt = { vm.loadPrintings(current) },
-        )
-    }
-
-    printings?.let { state ->
-        val card = selected?.let { s -> cards.firstOrNull { it.board == s.board && it.cardKey == s.cardKey } }
-        PrintingsDialog(
-            state = state,
-            currentScryfallId = card?.scryfallId,
-            onDismiss = vm::closePrintings,
-            onPick = { printing -> card?.let { vm.changePrinting(it, printing) } },
         )
     }
 
@@ -353,7 +358,6 @@ fun DeckScreen(
             onDismiss = { dialog = null },
             onConfirm = { dialog = null; vm.removeFromDevice() },
         )
-        "add" -> AddCardDialog(vm = vm, onDismiss = { dialog = null; vm.clearSearch() })
     }
 }
 
@@ -837,67 +841,61 @@ private fun CardDetailDialog(
 
 /** Elegir arte: todas las impresiones de la carta, como en Moxfield. */
 @Composable
-private fun PrintingsDialog(
+private fun PrintingsScreen(
     state: PrintingsState,
     currentScryfallId: String?,
     onDismiss: () -> Unit,
     onPick: (ScryCard) -> Unit,
 ) {
     val t = LocalStrings.current
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
-        Surface(
-            Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp),
-            shape = RoundedCornerShape(16.dp),
-        ) {
-            Column {
-                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(t.chooseArt, style = MaterialTheme.typography.titleMedium)
-                        Text(state.cardName, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    TextButton(onClick = onDismiss) { Text(t.close) }
+    BackHandler(onBack = onDismiss)
+    // Full screen inside the activity window, like "Add card", so the insets are always the real ones.
+    Surface(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(t.chooseArt, style = MaterialTheme.typography.titleMedium)
+                    Text(state.cardName, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                when {
-                    state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    state.error != null -> MessageBox(state.error)
-                    state.printings.isEmpty() -> MessageBox(t.noResults, isError = false)
-                    else -> LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 110.dp),
-                        modifier = Modifier.fillMaxSize().padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(state.printings, key = { it.id }) { p ->
-                            val current = p.id == currentScryfallId
-                            Column(
-                                Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .then(if (current) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
-                                    .clickable(enabled = !current) { onPick(p) }
-                                    .padding(2.dp),
-                            ) {
-                                AsyncImage(
-                                    model = p.imageUrl(ScryfallImages.Size.NORMAL),
-                                    contentDescription = p.setName,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxWidth().aspectRatio(0.716f).clip(RoundedCornerShape(6.dp)),
-                                )
-                                Text(
-                                    "${p.set.uppercase()} · ${p.collectorNumber}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                )
-                                Text(
-                                    listOfNotNull(p.setName.ifBlank { null }, p.prices.eur?.let { "$it €" }).joinToString(" · "),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+                TextButton(onClick = onDismiss) { Text(t.close) }
+            }
+            when {
+                state.loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                state.error != null -> MessageBox(state.error)
+                state.printings.isEmpty() -> MessageBox(t.noResults, isError = false)
+                else -> LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 110.dp),
+                    modifier = Modifier.fillMaxSize().padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(state.printings, key = { it.id }) { p ->
+                        val current = p.id == currentScryfallId
+                        Column(
+                            Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .then(if (current) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp)) else Modifier)
+                                .clickable(enabled = !current) { onPick(p) }
+                                .padding(2.dp),
+                        ) {
+                            AsyncImage(
+                                model = p.imageUrl(ScryfallImages.Size.NORMAL),
+                                contentDescription = p.setName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxWidth().aspectRatio(0.716f).clip(RoundedCornerShape(6.dp)),
+                            )
+                            Text(
+                                "${p.set.uppercase()} · ${p.collectorNumber}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                listOfNotNull(p.setName.ifBlank { null }, p.prices.eur?.let { "$it €" }).joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }
