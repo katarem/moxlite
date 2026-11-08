@@ -51,7 +51,12 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             log.w(TAG, "$run failed", e)
             if (runAttemptCount < 5) Result.retry() else Result.failure()
         }
-        log.i(TAG, "$run finished: ${result.javaClass.simpleName}")
+        val outcome = when (result) {
+            is Result.Success -> "success"
+            is Result.Retry -> "retry later"
+            else -> "failed"
+        }
+        log.i(TAG, "$run finished: $outcome")
         return result
     }
 

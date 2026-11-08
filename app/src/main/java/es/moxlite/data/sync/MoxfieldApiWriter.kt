@@ -7,18 +7,22 @@ import es.moxlite.data.remote.Http
 import es.moxlite.data.remote.MoxError
 import es.moxlite.data.remote.moxfield.AddCardBody
 import es.moxlite.data.remote.moxfield.CreateDeckBody
+import es.moxlite.data.remote.moxfield.DeckQuery
 import es.moxlite.data.remote.moxfield.DeckInfoBody
 import es.moxlite.data.remote.moxfield.EditionBody
 import es.moxlite.data.remote.moxfield.ImportBody
 import es.moxlite.data.remote.moxfield.MoveBody
 import es.moxlite.data.remote.moxfield.MoxBoardCardDto
 import es.moxlite.data.remote.moxfield.MoxDeckDto
+import es.moxlite.data.remote.moxfield.MoxDeckSummaryDto
 import es.moxlite.data.remote.moxfield.MoxfieldService
 import es.moxlite.data.remote.moxfield.QuantityBody
+import es.moxlite.data.session.AuthResult
 import es.moxlite.data.session.SessionManager
 import es.moxlite.domain.DeckLine
 import es.moxlite.domain.DeckText
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -88,25 +92,24 @@ class MoxfieldApiWriter(
 
     // ---------- Operaciones ----------
 
+    /**
+     * Creates the deck and fills it with a text import. Safe to retry: if an earlier attempt already
+     * created it (and the app could not read the answer), that deck is reused instead of creating
+     * another one, so a failed import never leaves a trail of empty copies.
+     */
     private suspend fun create(deck: DeckEntity, op: DeckOp.CreateDeck, cards: List<DeckCardEntity>): WriteResult {
-        log.i(TAG, "Creating ${deck.publicId} in Moxfield (format=${deck.format.ifBlank { op.format }}, cards=${cards.size}, copiedFrom=${op.copiedFrom})")
-        val response = api.createDeck(
-            CreateDeckBody(
-                name = deck.name.ifBlank { op.name },
-                format = deck.format.ifBlank { op.format }.ifBlank { "none" },
-                visibility = deck.visibility.ifBlank { op.visibility },
-                description = deck.description,
-            )
-        )
-        val created = parseObject(ok(response)) ?: throw MoxError.WriteRejected(response.code(), "sin respuesta")
-        val publicId = created.str("publicId") ?: throw MoxError.WriteRejected(response.code(), "sin publicId")
-        val remoteId = created.str("id") ?: api.deck(publicId).id
-        log.i(TAG, "${deck.publicId} created in Moxfield as $publicId; importing its cards")
+        val name = deck.name.ifBlank { op.name }
+        val format = WriteParsing.formatForNewDeck(deck.format.ifBlank { op.format })
+        val target = findCreatedDeck(name, deck.fetchedAt)?.also {
+            log.w(TAG, "${deck.publicId} already exists in Moxfield as ${it.publicId} (earlier attempt): reusing it")
+        } ?: createRemote(deck, op, name, format, cards.size)
+        val publicId = target.publicId
+        val remoteId = target.id ?: api.deck(publicId).id
+        log.i(TAG, "${deck.publicId} is $publicId in Moxfield; importing its cards")
 
         if (cards.isNotEmpty()) {
             val text = importText(cards)
-            val version = (created["version"] as? JsonPrimitive)?.intOrNull
-            val first = api.importText(remoteId, publicId, version?.toString(), ImportBody(text))
+            val first = api.importText(remoteId, publicId, target.version?.toString(), ImportBody(text))
             if (!first.isSuccessful) {
                 // Puede que la versión no fuera la esperada: se relee y se reintenta una vez.
                 log.w(TAG, "Import into $publicId rejected with HTTP ${first.code()}: retrying once with a fresh version")
@@ -119,6 +122,44 @@ class MoxfieldApiWriter(
         }
         log.i(TAG, "${deck.publicId} uploaded as $publicId")
         return WriteResult.Created(publicId, remoteId)
+    }
+
+    private suspend fun createRemote(deck: DeckEntity, op: DeckOp.CreateDeck, name: String, format: String, cardCount: Int): CreatedDeck {
+        log.i(TAG, "Creating ${deck.publicId} in Moxfield (format=$format, cards=$cardCount, copiedFrom=${op.copiedFrom})")
+        val response = api.createDeck(
+            CreateDeckBody(
+                name = name,
+                format = format,
+                visibility = deck.visibility.ifBlank { op.visibility },
+                description = deck.description,
+            )
+        )
+        val body = ok(response)
+        WriteParsing.createdDeck(body)?.let { return it }
+
+        // The deck was probably created but the answer has an unexpected shape: find it in the account.
+        log.w(TAG, "Create answered HTTP ${response.code()} without a readable publicId: ${body.take(MAX_LOGGED_BODY)}")
+        repeat(LOOKUP_ATTEMPTS) { attempt ->
+            if (attempt > 0) delay(LOOKUP_DELAY_MS)
+            findCreatedDeck(name, deck.fetchedAt)?.let { return it }
+        }
+        throw MoxError.WriteRejected(response.code(), "sin publicId")
+    }
+
+    /** An empty deck called [name] created in the account since the local deck was made, if any. */
+    private suspend fun findCreatedDeck(name: String, localCreatedAt: Long): CreatedDeck? {
+        if (localCreatedAt <= 0) return null
+        val recent = try {
+            api.personalDecks(DeckQuery(pageNumber = 1, pageSize = 100).toPersonalParams()).data
+        } catch (e: MoxError.NotFound) {
+            log.w(TAG, "Could not list the account's decks to look for an earlier copy", e)
+            return null
+        } catch (e: kotlinx.serialization.SerializationException) {
+            log.w(TAG, "Could not read the account's decks to look for an earlier copy", e)
+            return null
+        }
+        return WriteParsing.pickCreatedDeck(recent, name, localCreatedAt - CLOCK_MARGIN_MS)
+            ?.let { CreatedDeck(it.publicId, it.id.ifBlank { null }, version = null) }
     }
 
     private suspend fun setQuantity(remote: MoxDeckDto, op: DeckOp.SetQuantity) {
@@ -243,6 +284,15 @@ class MoxfieldApiWriter(
 }
 
 private const val TAG = "Writer"
+private const val MAX_LOGGED_BODY = 1_500
+private const val LOOKUP_ATTEMPTS = 2
+private const val LOOKUP_DELAY_MS = 2_000L
+
+/** Phone and Moxfield clocks may differ: a deck created this much before the local one still counts. */
+private const val CLOCK_MARGIN_MS = 10L * 60 * 1000
+
+/** Deck that exists in Moxfield and that the local deck becomes. [version] is null when unknown. */
+data class CreatedDeck(val publicId: String, val id: String?, val version: Int?)
 
 /** Partes puras (testeables) del escritor. */
 object WriteParsing {
@@ -281,6 +331,50 @@ object WriteParsing {
             else -> Unit
         }
     }
+
+    /**
+     * Deck in the answer to `POST /v2/decks`: the deck itself or wrapped (`{deck: …}`, `{data: …}`…).
+     * Null when no object with a `publicId` is found.
+     */
+    fun createdDeck(body: String): CreatedDeck? {
+        val root = runCatching { Http.json.parseToJsonElement(body) }.getOrNull() ?: return null
+        return findDeckObject(root, depth = 0)?.let { deck ->
+            fun s(key: String) = (deck[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+            val publicId = s("publicId") ?: return null
+            CreatedDeck(publicId, s("id"), (deck["version"] as? JsonPrimitive)?.intOrNull)
+        }
+    }
+
+    private fun findDeckObject(element: JsonElement, depth: Int): JsonObject? {
+        if (depth > 3 || element !is JsonObject) return null
+        if ((element["publicId"] as? JsonPrimitive)?.isString == true) return element
+        return listOf("deck", "data", "result", "value").firstNotNullOfOrNull { key ->
+            element[key]?.let { findDeckObject(it, depth + 1) }
+        }
+    }
+
+    /**
+     * Format for a deck created by the user: Moxfield files official precons under their own
+     * formats ("commanderPrecons", "precons"), which a copy must not keep.
+     */
+    fun formatForNewDeck(format: String): String = when (format) {
+        "commanderPrecons" -> "commander"
+        "precons", "" -> "none"
+        else -> format
+    }
+
+    /**
+     * The deck an earlier create left behind: same name, still empty (the import never ran) and
+     * created at or after [sinceMillis]. The newest wins. Decks with no creation date are never
+     * picked, so an older deck of the user with the same name is never overwritten.
+     */
+    fun pickCreatedDeck(decks: List<MoxDeckSummaryDto>, name: String, sinceMillis: Long): MoxDeckSummaryDto? =
+        decks.asSequence()
+            .filter { it.publicId.isNotBlank() && it.mainboardCount == 0 && it.name.trim().equals(name.trim(), ignoreCase = true) }
+            .mapNotNull { deck -> deck.createdAtUtc?.let(AuthResult::parseInstant)?.let { deck to it } }
+            .filter { (_, createdAt) -> createdAt >= sinceMillis }
+            .maxByOrNull { (_, createdAt) -> createdAt }
+            ?.first
 
     /** Mismo nombre, ignorando mayúsculas y comparando también solo la cara frontal. */
     fun sameName(a: String, b: String): Boolean {
